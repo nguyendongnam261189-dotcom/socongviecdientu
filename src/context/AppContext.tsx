@@ -43,10 +43,11 @@ interface AppContextType {
   setDocumentCategories: React.Dispatch<React.SetStateAction<string[]>>;
   gasUrl: string;
   setGasUrl: (url: string) => void;
-
-  // 🔥 SỬA DUY NHẤT 1 DÒNG
-  addTask: (task: Omit<Task, "id" | "createdAt">) => Promise<void>;
-
+  // Actions
+  addUser: (user: Partial<User>) => User;
+  updateUser: (id: string, updates: Partial<User>) => void;
+  deleteUser: (id: string) => void;
+  addTask: (task: Omit<Task, "id" | "createdAt">) => void;
   updateTaskStatus: (taskId: string, status: Task["status"]) => void;
   deleteTask: (taskId: string) => void;
   markTaskRead: (taskId: string) => void;
@@ -65,84 +66,256 @@ interface AppContextType {
     content: string,
     parentId?: string | null,
   ) => void;
-
-  addUser: (user: Partial<User>) => User;
-  updateUser: (id: string, updates: Partial<User>) => void;
-  deleteUser: (id: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>("tasks");
-
   const [departments, setDepartments] = useState<string[]>([
-    "Toán","Văn","Ngoại Ngữ","Lý - Hóa - Sinh","Sử - Địa - GDCD","Thể dục - QP","BGH"
+    "Toán",
+    "Văn",
+    "Ngoại Ngữ",
+    "Lý - Hóa - Sinh",
+    "Sử - Địa - GDCD",
+    "Thể dục - QP",
+    "BGH",
   ]);
-
   const [grades, setGrades] = useState<string[]>([
-    "Khối 10","Khối 11","Khối 12","Toàn trường"
+    "Khối 10",
+    "Khối 11",
+    "Khối 12",
+    "Toàn trường",
   ]);
-
   const [documentCategories, setDocumentCategories] = useState<string[]>([
-    "Công văn","Ảnh hoạt động","Thời khóa biểu","Kế hoạch giảng dạy","Khác"
+    "Công văn",
+    "Ảnh hoạt động",
+    "Thời khóa biểu",
+    "Kế hoạch giảng dạy",
+    "Khác",
   ]);
-
-  const [gasUrl, setGasUrlState] = useState<string>(localStorage.getItem("gasUrl") || "");
+  const [gasUrl, setGasUrlState] = useState<string>(
+    localStorage.getItem("gasUrl") || "",
+  );
+  const [toast, setToast] = useState<{
+    id: string;
+    message: string;
+    onUndo?: () => void;
+  } | null>(null);
 
   const setGasUrl = (url: string) => {
     setGasUrlState(url);
     localStorage.setItem("gasUrl", url);
   };
 
-  const [toast, setToast] = useState<any>(null);
   const [authReady, setAuthReady] = useState(false);
+
+  // Firestore listeners
+  useEffect(() => {
+    if (!currentUser) {
+      // Don't clear lists immediately, so LoginView won't think users.length === 0 unless it really is
+      const unsubscribeUsers = onSnapshot(
+        collection(db, "users"),
+        (snapshot) => {
+          setUsers(
+            snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as User),
+          );
+        },
+        (error) => {
+          console.error("Error fetching users:", error);
+        },
+      );
+      return () => unsubscribeUsers();
+    }
+
+    const unsubs: (() => void)[] = [];
+
+    unsubs.push(
+      onSnapshot(
+        collection(db, "users"),
+        (snapshot) => {
+          setUsers(
+            snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as User),
+          );
+        },
+        (error) => {
+          console.error("Error fetching users:", error);
+        },
+      ),
+    );
+
+    let tasksQuery = query(collection(db, "tasks"));
+    if (currentUser.role !== "admin") {
+      const conditionFilters = [
+        where("assignedTo", "array-contains", currentUser.id),
+        where("createdBy", "==", currentUser.id)
+      ];
+      
+      if (currentUser.role) {
+        conditionFilters.push(where("targetRoles", "array-contains", currentUser.role));
+      }
+      if (currentUser.department) {
+        conditionFilters.push(where("targetDepartments", "array-contains", currentUser.department));
+      }
+      if (currentUser.grade) {
+        conditionFilters.push(where("targetGrades", "array-contains", currentUser.grade));
+      }
+
+      tasksQuery = query(collection(db, "tasks"), or(...conditionFilters));
+    }
+
+    unsubs.push(
+      onSnapshot(
+        tasksQuery,
+        (snapshot) => {
+          setTasks(
+            snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Task),
+          );
+        },
+        (error) => {
+          console.error("Error fetching tasks:", error);
+        },
+      ),
+    );
+
+    unsubs.push(
+      onSnapshot(
+        collection(db, "comments"),
+        (snapshot) => {
+          setComments(
+            snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Comment),
+          );
+        },
+        (error) => {
+          console.error("Error fetching comments:", error);
+        },
+      ),
+    );
+
+    unsubs.push(
+      onSnapshot(
+        collection(db, "documents"),
+        (snapshot) => {
+          setDocuments(
+            snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Document),
+          );
+        },
+        (error) => {
+          console.error("Error fetching documents:", error);
+        },
+      ),
+    );
+
+    return () => unsubs.forEach((fn) => fn());
+  }, [currentUser]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser?.email) {
-        const q = query(collection(db, "users"), where("email", "==", firebaseUser.email));
-        const qs = await getDocs(q);
-        if (!qs.empty) {
-          setCurrentUser({ id: qs.docs[0].id, ...qs.docs[0].data() } as User);
+        // Find existing user directly from firestore just to be safe
+        const q = query(
+          collection(db, "users"),
+          where("email", "==", firebaseUser.email),
+        );
+        try {
+          const qs = await getDocs(q);
+          if (!qs.empty) {
+            const appUser = { id: qs.docs[0].id, ...qs.docs[0].data() } as User;
+            setCurrentUser(appUser);
+            if (appUser.role === "admin" || appUser.role === "leader") {
+              setActiveTab("dashboard");
+            } else {
+              setActiveTab("tasks");
+            }
+          } else {
+            setCurrentUser(null);
+          }
+        } catch (error) {
+          console.error("Auth init fetch user error:", error);
+          setCurrentUser(null);
         }
-      } else setCurrentUser(null);
+      } else {
+        setCurrentUser(null);
+      }
       setAuthReady(true);
     });
+
     return () => unsubscribe();
   }, []);
 
   const handleLogout = async () => {
-    await signOut(auth);
-    setCurrentUser(null);
+    try {
+      await signOut(auth);
+      setCurrentUser(null);
+    } catch (error) {
+      console.error("Error signing out: ", error);
+    }
   };
 
-  const showToast = (message: string) => console.log(message);
-  const hideToast = () => {};
+  const showToast = (message: string, onUndo?: () => void) => {
+    const id = Math.random().toString();
+    setToast({ id, message, onUndo });
+    setTimeout(() => {
+      setToast((current) => (current?.id === id ? null : current));
+    }, 5000);
+  };
+
+  const hideToast = () => setToast(null);
 
   const addUser = (userData: Partial<User>) => {
-    const newId = doc(collection(db, "users")).id;
-    const newUser: User = { ...userData, id: newId } as User;
-    setUsers(prev => [...prev, newUser]);
-    setDoc(doc(db, "users", newId), newUser);
+    const newId =
+      auth.currentUser?.uid || Math.random().toString(36).substr(2, 9);
+    const newUser: User = {
+      role: "teacher",
+      department: "Khác",
+      grade: "",
+      status: "approved",
+      createdAt: new Date().toISOString(),
+      ...userData,
+      id: newId,
+    } as User;
+
+    // Optimistic
+    setUsers((prev) => [...prev.filter((u) => u.id !== newId), newUser]);
+
+    // Firestore
+    setDoc(doc(db, "users", newId), newUser).catch((err) => {
+      console.error("Error adding user: ", err);
+    });
+
     return newUser;
   };
 
-  // 🔥 SỬA DUY NHẤT HÀM addTask
-  const addTask = async (taskData: Omit<Task, "id" | "createdAt">) => {
-    const newId = doc(collection(db, "tasks")).id;
+  const updateUser = (id: string, updates: Partial<User>) => {
+    // Optimistic
+    setUsers(users.map((u) => (u.id === id ? { ...u, ...updates } : u)));
 
+    updateDoc(doc(db, "users", id), updates).catch((err) => {
+      console.error("Error updating user: ", err);
+    });
+  };
+
+  const deleteUser = (id: string) => {
+    setUsers(users.filter((u) => u.id !== id));
+    deleteDoc(doc(db, "users", id)).catch((err) => {
+      console.error("Error deleting user: ", err);
+    });
+  };
+
+  const addTask = (taskData: Omit<Task, "id" | "createdAt">) => {
+    const newId = doc(collection(db, "tasks")).id;
     const newTask: Task = {
       ...taskData,
       id: newId,
       createdAt: new Date().toISOString(),
     };
-
     if (taskData.category === "announcement" || taskData.category === "poll") {
       newTask.readBy = [];
     }
@@ -150,47 +323,289 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       newTask.submissions = [];
     }
 
-    setTasks(prev => [newTask, ...prev]);
+    // Optimistic
+    setTasks((prev) => [newTask, ...prev]);
 
+    // Firestore
+    setDoc(doc(db, "tasks", newId), newTask)
+      .then(() => {
+        if (
+          taskData.category === "announcement" &&
+          taskData.attachments &&
+          taskData.attachments.length > 0
+        ) {
+          taskData.attachments.forEach((att) => {
+            const docId = doc(collection(db, "documents")).id;
+            const newDocData: Document = {
+              id: docId,
+              title: att.title || taskData.title,
+              driveUrl: att.url,
+              createdAt: new Date().toISOString(),
+              createdBy: taskData.createdBy,
+            } as Document;
+            setDoc(doc(db, "documents", docId), newDocData);
+          });
+        }
+      })
+      .catch((err) => {
+        console.error("Error adding task: ", err);
+      });
+  };
+
+  const updateTaskStatus = (taskId: string, status: Task["status"]) => {
+    setTasks((prevTasks) =>
+      prevTasks.map((t) => (t.id === taskId ? { ...t, status } : t)),
+    );
+    updateDoc(doc(db, "tasks", taskId), { status }).catch((err) =>
+      console.error(err),
+    );
+  };
+
+  const deleteTask = (taskId: string) => {
+    setTasks((prevTasks) => prevTasks.filter((t) => t.id !== taskId));
+    deleteDoc(doc(db, "tasks", taskId)).catch((err) => console.error(err));
+  };
+
+  const markTaskRead = async (taskId: string) => {
+    if (!currentUser) return;
     try {
-      await setDoc(doc(db, "tasks", newId), newTask);
-
-      if (taskData.category === "announcement" && taskData.attachments?.length) {
-        for (const att of taskData.attachments) {
-          const docId = doc(collection(db, "documents")).id;
-          await setDoc(doc(db, "documents", docId), {
-            id: docId,
-            title: att.title || taskData.title,
-            driveUrl: att.url,
-            createdAt: new Date().toISOString(),
-            createdBy: taskData.createdBy,
+      const taskRef = doc(db, "tasks", taskId);
+      const taskSnap = await getDoc(taskRef);
+      if (taskSnap.exists()) {
+        const currentReads = taskSnap.data().readBy || [];
+        if (!currentReads.includes(currentUser.id)) {
+          await updateDoc(taskRef, {
+            readBy: [...currentReads, currentUser.id],
           });
         }
       }
-
+      // Optimistic
+      setTasks((prevTasks) => {
+        let changed = false;
+        const newTasks = prevTasks.map((t) => {
+          if (t.id === taskId) {
+            const readBy = t.readBy || [];
+            if (!readBy.includes(currentUser.id)) {
+              changed = true;
+              return { ...t, readBy: [...readBy, currentUser.id] };
+            }
+          }
+          return t;
+        });
+        return changed ? newTasks : prevTasks;
+      });
     } catch (err) {
       console.error(err);
-      setTasks(prev => prev.filter(t => t.id !== newId));
-      throw err;
     }
   };
 
+  const votePoll = async (taskId: string, optionId: string | null) => {
+    if (!currentUser) return;
+    try {
+      const taskRef = doc(db, "tasks", taskId);
+      const taskSnap = await getDoc(taskRef);
+      const data = taskSnap.data();
+      let newOptions = [];
+      let newReadBy = [];
+      if (data && data.category === "poll" && data.pollOptions) {
+        let isRemovingExisting = false;
+        newOptions = data.pollOptions.map((opt: any) => {
+          const hasUser = opt.votes.includes(currentUser.id);
+          if (hasUser && opt.id === optionId) {
+            isRemovingExisting = true;
+          }
+          return {
+            ...opt,
+            votes: opt.votes.filter((id: string) => id !== currentUser.id),
+          };
+        });
+
+        if (!isRemovingExisting && optionId !== null) {
+          const targetOption = newOptions.find(
+            (opt: any) => opt.id === optionId,
+          );
+          if (targetOption) {
+            targetOption.votes.push(currentUser.id);
+          }
+        }
+        newReadBy = data.readBy || [];
+        if (!newReadBy.includes(currentUser.id)) newReadBy.push(currentUser.id);
+
+        await updateDoc(taskRef, {
+          pollOptions: newOptions,
+          readBy: newReadBy,
+        });
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const toggleTaskLock = async (taskId: string) => {
+    setTasks((prevTasks) =>
+      prevTasks.map((t) =>
+        t.id === taskId ? { ...t, isLocked: !t.isLocked } : t,
+      ),
+    );
+    try {
+      const taskRef = doc(db, "tasks", taskId);
+      const taskSnap = await getDoc(taskRef);
+      if (taskSnap.exists()) {
+        await updateDoc(taskRef, { isLocked: !taskSnap.data().isLocked });
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const toggleTaskUrgent = async (taskId: string) => {
+    setTasks((prevTasks) =>
+      prevTasks.map((t) =>
+        t.id === taskId ? { ...t, isUrgent: !t.isUrgent } : t,
+      ),
+    );
+    try {
+      const taskRef = doc(db, "tasks", taskId);
+      const taskSnap = await getDoc(taskRef);
+      if (taskSnap.exists()) {
+        await updateDoc(taskRef, { isUrgent: !taskSnap.data().isUrgent });
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const toggleCommentsLock = async (taskId: string) => {
+    setTasks((prevTasks) =>
+      prevTasks.map((t) =>
+        t.id === taskId ? { ...t, commentsLocked: !t.commentsLocked } : t,
+      ),
+    );
+    try {
+      const taskRef = doc(db, "tasks", taskId);
+      const taskSnap = await getDoc(taskRef);
+      if (taskSnap.exists()) {
+        await updateDoc(taskRef, { commentsLocked: !taskSnap.data().commentsLocked });
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const submitReport = async (
+    taskId: string,
+    content: string,
+    url?: string,
+    data?: Record<string, string | number>,
+  ) => {
+    if (!currentUser) return;
+    try {
+      const taskRef = doc(db, "tasks", taskId);
+      const taskSnap = await getDoc(taskRef);
+      if (taskSnap.exists()) {
+        const submissions = taskSnap.data().submissions || [];
+        const existingIndex = submissions.findIndex(
+          (r: any) => r.userId === currentUser.id,
+        );
+
+        if (existingIndex >= 0) {
+          throw new Error("You have already submitted this report.");
+        }
+
+        const newSubmission = {
+          userId: currentUser.id,
+          fileUrl: url || "",
+          content: content,
+          data: data,
+          submittedAt: new Date().toISOString(),
+        };
+        const newSubmissions = [...submissions, newSubmission];
+        
+        const updateData: any = { submissions: newSubmissions };
+        
+        const assignedTo = taskSnap.data().assignedTo || [];
+        if (assignedTo.length > 0) {
+          const submittedUserIds = newSubmissions.map(s => s.userId);
+          const allSubmitted = assignedTo.every((uid: string) => submittedUserIds.includes(uid));
+          if (allSubmitted) {
+            updateData.status = 'done';
+          }
+        }
+
+        await updateDoc(taskRef, updateData);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const addComment = (
+    taskId: string,
+    content: string,
+    parentId?: string | null,
+  ) => {
+    if (!currentUser) return;
+    const newId = doc(collection(db, "comments")).id;
+    const newComment: Comment = {
+      id: newId,
+      taskId,
+      parentId: parentId || null,
+      userId: currentUser.id,
+      content,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Optimistic
+    setComments((prev) => [...prev, newComment]);
+
+    setDoc(doc(db, "comments", newId), newComment).catch((err) => {
+      console.error("Error adding comment: ", err);
+    });
+  };
+
   return (
-    <AppContext.Provider value={{
-      currentUser,setCurrentUser,logout:handleLogout,
-      users,setUsers,tasks,setTasks,comments,setComments,
-      documents,setDocuments,departments,setDepartments,
-      grades,setGrades,documentCategories,setDocumentCategories,
-      gasUrl,setGasUrl,activeTab,setActiveTab,
-      toast,showToast,hideToast,authReady,
-      addUser,updateUser:()=>{},deleteUser:()=>{},
-      addTask,
-      updateTaskStatus:()=>{},deleteTask:()=>{},
-      markTaskRead:()=>{},votePoll:()=>{},
-      toggleTaskLock:()=>{},toggleTaskUrgent:()=>{},
-      toggleCommentsLock:()=>{},submitReport:()=>{},
-      addComment:()=>{}
-    }}>
+    <AppContext.Provider
+      value={{
+        currentUser,
+        setCurrentUser,
+        logout: handleLogout,
+        users,
+        setUsers,
+        tasks,
+        setTasks,
+        comments,
+        setComments,
+        documents,
+        setDocuments,
+        departments,
+        setDepartments,
+        grades,
+        setGrades,
+        documentCategories,
+        setDocumentCategories,
+        gasUrl,
+        setGasUrl,
+        activeTab,
+        setActiveTab,
+        toast,
+        showToast,
+        hideToast,
+        authReady,
+        addUser,
+        updateUser,
+        deleteUser,
+        addTask,
+        updateTaskStatus,
+        deleteTask,
+        markTaskRead,
+        votePoll,
+        toggleTaskLock,
+        toggleTaskUrgent,
+        toggleCommentsLock,
+        submitReport,
+        addComment,
+      }}
+    >
       {children}
     </AppContext.Provider>
   );
@@ -198,6 +613,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
 export const useAppContext = () => {
   const context = useContext(AppContext);
-  if (!context) throw new Error("useAppContext must be used within AppProvider");
+  if (context === undefined) {
+    throw new Error("useAppContext must be used within an AppProvider");
+  }
   return context;
 };
