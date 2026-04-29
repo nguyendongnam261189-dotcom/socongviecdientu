@@ -44,7 +44,7 @@ interface AppContextType {
   gasUrl: string;
   setGasUrl: (url: string) => void;
   // Actions
-  addUser: (user: Partial<User>) => User;
+  addUser: (user: Partial<User>) => Promise<User>;
   updateUser: (id: string, updates: Partial<User>) => void;
   deleteUser: (id: string) => void;
   addTask: (task: Omit<Task, "id" | "createdAt">) => void;
@@ -258,7 +258,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const hideToast = () => setToast(null);
 
-  const addUser = (userData: Partial<User>) => {
+  const addUser = async (userData: Partial<User>) => {
     const newId =
       auth.currentUser?.uid || Math.random().toString(36).substr(2, 9);
     const newUser: User = {
@@ -275,7 +275,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     setUsers((prev) => [...prev.filter((u) => u.id !== newId), newUser]);
 
     // Firestore
-    setDoc(doc(db, "users", newId), newUser).catch((err) => {
+    await setDoc(doc(db, "users", newId), newUser).catch((err) => {
       console.error("Error adding user: ", err);
     });
 
