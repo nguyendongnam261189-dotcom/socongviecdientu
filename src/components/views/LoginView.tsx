@@ -47,7 +47,7 @@ export const LoginView: React.FC = () => {
         const allUsersSnapshot = await getDocs(allUsersQuery);
         const isFirstUser = allUsersSnapshot.empty;
         
-        const createdUser = addUser({
+        const createdUser = await addUser({
           email: userEmail,
           name: result.user.displayName || userEmail.split('@')[0],
           role: isFirstUser ? 'admin' : 'teacher',
