@@ -3,7 +3,8 @@ import { useAppContext } from '../../context/AppContext';
 import { School, LogIn } from 'lucide-react';
 import { cn } from '../../utils';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { auth } from '../../firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { auth, db } from '../../firebase';
 
 export const LoginView: React.FC = () => {
   const { setCurrentUser, users, addUser } = useAppContext();
@@ -21,22 +22,30 @@ export const LoginView: React.FC = () => {
         return;
       }
       
-      // For demo purposes, we auto-map user based on email.
-      // If we don't find it, we'll assign the first user just so they can log in, or show an error.
-      const existingUser = users.find(u => u.email === userEmail);
-      if (existingUser) {
-        if (existingUser.status === 'pending') {
+      // Directly check Firestore to avoid race conditions with AppContext users loading
+      const q = query(collection(db, "users"), where("email", "==", userEmail));
+      const querySnapshot = await getDocs(q);
+      
+      let existingUserFromDb = null;
+      if (!querySnapshot.empty) {
+        existingUserFromDb = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() } as any;
+      }
+
+      if (existingUserFromDb) {
+        if (existingUserFromDb.status === 'pending') {
           alert('Tài khoản của bạn đang chờ Admin duyệt. Vui lòng quay lại sau.');
           auth.signOut();
-        } else if (existingUser.status === 'rejected') {
+        } else if (existingUserFromDb.status === 'rejected') {
           alert('Tài khoản của bạn đã bị từ chối.');
           auth.signOut();
         } else {
-          setCurrentUser(existingUser);
+          setCurrentUser(existingUserFromDb);
         }
       } else {
-        // Create a pending user request or admin if first user
-        const isFirstUser = users.length === 0;
+        // We need to check if ANY user exists to determine if we make this one admin
+        const allUsersQuery = query(collection(db, "users"));
+        const allUsersSnapshot = await getDocs(allUsersQuery);
+        const isFirstUser = allUsersSnapshot.empty;
         
         const createdUser = addUser({
           email: userEmail,
