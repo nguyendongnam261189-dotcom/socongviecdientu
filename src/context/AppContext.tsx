@@ -216,7 +216,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
         try {
           const qs = await getDocs(q);
           if (!qs.empty) {
-            const appUser = { id: qs.docs[0].id, ...qs.docs[0].data() } as User;
+            let appUser = { id: qs.docs[0].id, ...qs.docs[0].data() } as User;
+            
+            // Fix ID mismatch
+            if (appUser.id !== firebaseUser.uid) {
+              const correctedUser = { ...appUser, id: firebaseUser.uid };
+              try {
+                await setDoc(doc(db, "users", firebaseUser.uid), correctedUser);
+                await deleteDoc(doc(db, "users", appUser.id)).catch(() => {});
+                appUser = correctedUser;
+              } catch (e) {
+                console.error("Migration failed in context", e);
+              }
+            }
+
             setCurrentUser(appUser);
             if (appUser.role === "admin" || appUser.role === "leader") {
               setActiveTab("dashboard");
@@ -259,8 +272,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
   const hideToast = () => setToast(null);
 
   const addUser = async (userData: Partial<User>) => {
-    const newId =
-      auth.currentUser?.uid || Math.random().toString(36).substr(2, 9);
+    const newId = userData.id || auth.currentUser?.uid || Math.random().toString(36).substr(2, 9);
     const newUser: User = {
       role: "teacher",
       department: "Khác",
@@ -288,6 +300,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
 
     updateDoc(doc(db, "users", id), updates).catch((err) => {
       console.error("Error updating user: ", err);
+      alert("Error updating user: " + err.message);
     });
   };
 
