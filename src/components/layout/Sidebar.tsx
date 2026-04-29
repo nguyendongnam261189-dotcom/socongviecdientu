@@ -23,6 +23,7 @@ export const Sidebar: React.FC = () => {
   ).length;
 
   const isAdminOrLeader = currentUser.role === 'admin' || currentUser.role === 'leader';
+  const isAdminOrBGH = currentUser.role === 'admin' || currentUser.department === 'BGH';
 
   return (
     <div className="w-64 bg-slate-900 text-slate-300 flex-col py-6 px-4 hidden md:flex h-full shadow-2xl relative z-30 flex-shrink-0">
@@ -37,12 +38,14 @@ export const Sidebar: React.FC = () => {
       </div>
 
       <div className="flex-1 space-y-2">
-        <NavItem 
-          active={activeTab === 'users'} 
-          onClick={() => setActiveTab('users')}
-          icon={<Users className="w-5 h-5" />}
-          label="Thành viên"
-        />
+        {isAdminOrBGH && (
+          <NavItem 
+            active={activeTab === 'users'} 
+            onClick={() => setActiveTab('users')}
+            icon={<Users className="w-5 h-5" />}
+            label="Thành viên"
+          />
+        )}
         {isAdminOrLeader && (
           <>
             <NavItem 
