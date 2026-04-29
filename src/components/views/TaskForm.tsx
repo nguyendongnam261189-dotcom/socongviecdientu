@@ -166,12 +166,19 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack }) => {
       category,
       assignedTo,
       visibility: category === 'task' ? visibility : 'public',
-      targetRoles: targetType === 'specific' ? selectedRoles : undefined,
-      targetDepartments: targetType === 'specific' ? selectedDepartments : undefined,
-      targetGrades: targetType === 'specific' ? selectedGrades : undefined,
       createdBy: currentUser?.id || '',
       attachments: attachments.filter(a => a.title.trim() && a.url.trim()),
     };
+
+    if (targetType === 'specific') {
+      newTaskParams.targetRoles = selectedRoles;
+      newTaskParams.targetDepartments = selectedDepartments;
+      newTaskParams.targetGrades = selectedGrades;
+    } else {
+      newTaskParams.targetRoles = [];
+      newTaskParams.targetDepartments = [];
+      newTaskParams.targetGrades = [];
+    }
     
     if (hasDeadline && deadline && category === 'task') {
       newTaskParams.deadline = new Date(deadline).toISOString();
