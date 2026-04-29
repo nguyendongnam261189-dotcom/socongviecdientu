@@ -37,6 +37,12 @@ export const Sidebar: React.FC = () => {
       </div>
 
       <div className="flex-1 space-y-2">
+        <NavItem 
+          active={activeTab === 'users'} 
+          onClick={() => setActiveTab('users')}
+          icon={<Users className="w-5 h-5" />}
+          label="Thành viên"
+        />
         {isAdminOrLeader && (
           <>
             <NavItem 
@@ -44,12 +50,6 @@ export const Sidebar: React.FC = () => {
               onClick={() => setActiveTab('dashboard')}
               icon={<LayoutDashboard className="w-5 h-5" />}
               label="Bảng điều khiển"
-            />
-            <NavItem 
-              active={activeTab === 'users'} 
-              onClick={() => setActiveTab('users')}
-              icon={<Users className="w-5 h-5" />}
-              label="Tổ chức & Nhân sự"
             />
             {currentUser.role === 'admin' && (
               <NavItem 
