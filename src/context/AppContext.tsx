@@ -144,6 +144,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     let tasksQuery = query(collection(db, "tasks"));
     if (currentUser && currentUser.role !== "admin") {
       const conditionFilters = [
+        where("visibility", "==", "public"),
         where("assignedTo", "array-contains", currentUser.id),
         where("createdBy", "==", currentUser.id)
       ];
@@ -297,7 +298,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const updateUser = (id: string, updates: Partial<User>) => {
     // Optimistic
-    setUsers(users.map((u) => (u.id === id ? { ...u, ...updates } : u)));
+    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, ...updates } : u)));
 
     updateDoc(doc(db, "users", id), updates).catch((err) => {
       console.error("Error updating user: ", err);
@@ -306,7 +307,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const deleteUser = (id: string) => {
-    setUsers(users.filter((u) => u.id !== id));
+    setUsers((prev) => prev.filter((u) => u.id !== id));
     deleteDoc(doc(db, "users", id)).catch((err) => {
       console.error("Error deleting user: ", err);
     });
@@ -352,6 +353,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
       })
       .catch((err) => {
         console.error("Error adding task: ", err);
+        alert("Lỗi khi thêm task: " + err.message);
       });
   };
 
