@@ -141,34 +141,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
       ),
     );
 
-    let tasksQuery = query(collection(db, "tasks"));
-    if (currentUser && currentUser.role !== "admin") {
-      const conditionFilters = [
-        where("visibility", "==", "public"),
-        where("assignedTo", "array-contains", currentUser.id),
-        where("createdBy", "==", currentUser.id)
-      ];
-      
-      if (currentUser.role) {
-        conditionFilters.push(where("targetRoles", "array-contains", currentUser.role));
-      }
-      if (currentUser.department) {
-        conditionFilters.push(where("targetDepartments", "array-contains", currentUser.department));
-      }
-      if (currentUser.grade) {
-        conditionFilters.push(where("targetGrades", "array-contains", currentUser.grade));
-      }
-
-      tasksQuery = query(collection(db, "tasks"), or(...conditionFilters));
-    }
+    // We must fetch all tasks because Firestore doesn't support multiple array-contains in an OR query,
+    // and if we try to, it will crash and no tasks will load for non-admins.
+    const tasksQuery = query(collection(db, "tasks"));
 
     unsubs.push(
       onSnapshot(
         tasksQuery,
         (snapshot) => {
-          setTasks(
-            snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Task),
-          );
+          let docs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Task);
+          
+          if (currentUser && currentUser.role !== "admin") {
+            docs = docs.filter((t) => {
+              // 1. Creator always sees their tasks
+              if (t.createdBy === currentUser.id) return true;
+              // 2. Directly assigned individual always sees it
+              if (t.assignedTo?.includes(currentUser.id)) return true;
+              
+              // Check if any specific targeting is applied (group targeting)
+              const hasRoleTarget = t.targetRoles && t.targetRoles.length > 0;
+              const hasDeptTarget = t.targetDepartments && t.targetDepartments.length > 0;
+              const hasGradeTarget = t.targetGrades && t.targetGrades.length > 0;
+              const hasSpecificTargets = hasRoleTarget || hasDeptTarget || hasGradeTarget;
+
+              if (hasSpecificTargets) {
+                // Must match at least one of the specific targets
+                if (currentUser.role && t.targetRoles?.includes(currentUser.role)) return true;
+                if (currentUser.department && t.targetDepartments?.includes(currentUser.department)) return true;
+                if (currentUser.grade && t.targetGrades?.includes(currentUser.grade)) return true;
+                return false; // Did not match any specific target
+              }
+
+              // 3. Fallback to broad visibility completely public tasks
+              return t.visibility === "public";
+            });
+          }
+          setTasks(docs);
         },
         (error) => {
           console.error("Error fetching tasks:", error);
