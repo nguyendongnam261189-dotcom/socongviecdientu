@@ -27,21 +27,19 @@ export const BottomNav: React.FC = () => {
   return (
     <div className="bg-white border-t border-slate-200 pb-safe z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] overflow-x-auto no-scrollbar">
       <div className="flex items-center justify-start min-w-max md:justify-around h-16 px-2">
+        <NavItem 
+          active={activeTab === 'users'} 
+          onClick={() => setActiveTab('users')}
+          icon={<Users className="w-5 h-5" />}
+          label="Thành viên"
+        />
         {isAdminOrLeader && (
-          <>
-            <NavItem 
-              active={activeTab === 'dashboard'} 
-              onClick={() => setActiveTab('dashboard')}
-              icon={<LayoutDashboard className="w-5 h-5" />}
-              label="Quản lý"
-            />
-            <NavItem 
-              active={activeTab === 'users'} 
-              onClick={() => setActiveTab('users')}
-              icon={<Users className="w-5 h-5" />}
-              label="Nhân sự"
-            />
-          </>
+          <NavItem 
+            active={activeTab === 'dashboard'} 
+            onClick={() => setActiveTab('dashboard')}
+            icon={<LayoutDashboard className="w-5 h-5" />}
+            label="Quản lý"
+          />
         )}
         <NavItem 
           active={activeTab === 'tasks'} 
