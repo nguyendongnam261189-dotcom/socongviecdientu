@@ -318,7 +318,7 @@ export const UsersView: React.FC = () => {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-20 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-4 md:space-y-0 items-start">
-        {currentUser?.role === 'admin' && users.filter(u => u.status === 'pending').length > 0 && (
+        {currentUser?.role === 'admin' && users.filter(u => u.status === 'pending' && !users.find(other => other.email === u.email && other.status === 'approved')).length > 0 && (
           <div className="col-span-full mb-4">
             <div className="bg-amber-50 rounded-2xl border border-amber-200 overflow-hidden shadow-sm">
               <div className="bg-amber-100/50 p-3 border-b border-amber-200 flex justify-between items-center">
@@ -328,12 +328,12 @@ export const UsersView: React.FC = () => {
                     Chờ phê duyệt
                   </h3>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500 text-white shadow-sm">
-                    {users.filter(u => u.status === 'pending').length}
+                    {users.filter(u => u.status === 'pending' && !users.find(other => other.email === u.email && other.status === 'approved')).length}
                   </span>
                 </div>
               </div>
               <div className="divide-y divide-amber-100">
-                {users.filter(u => u.status === 'pending').map(user => (
+                {users.filter(u => u.status === 'pending' && !users.find(other => other.email === u.email && other.status === 'approved')).map(user => (
                   <div key={user.id} className="p-3 flex items-center justify-between hover:bg-amber-100/30 transition-colors">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center font-bold text-amber-700 text-sm border border-amber-200 shrink-0">
@@ -413,7 +413,7 @@ export const UsersView: React.FC = () => {
                       {user.role === 'admin' && <Shield className="w-5 h-5 text-rose-500 bg-rose-50 p-1 rounded-md" />}
                       {user.role === 'leader' && <Star className="w-5 h-5 text-amber-500 bg-amber-50 p-1 rounded-md" />}
                       {(currentUser?.role === 'admin' || currentUser?.role === 'leader') && (
-                        <button onClick={() => setEditingUser(user)} className="text-slate-300 hover:text-indigo-600 p-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => setEditingUser(user)} className="text-slate-400 hover:text-indigo-600 p-1 transition-colors">
                           <Edit2 className="w-4 h-4" />
                         </button>
                       )}
