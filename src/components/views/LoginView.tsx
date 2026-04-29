@@ -3,7 +3,7 @@ import { useAppContext } from '../../context/AppContext';
 import { School, LogIn } from 'lucide-react';
 import { cn } from '../../utils';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
 
 export const LoginView: React.FC = () => {
@@ -29,6 +29,21 @@ export const LoginView: React.FC = () => {
       let existingUserFromDb = null;
       if (!querySnapshot.empty) {
         existingUserFromDb = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() } as any;
+        
+        // Fix for mismatched IDs (from earlier bug where users had random IDs instead of auth UIDs)
+        if (existingUserFromDb.id !== result.user.uid) {
+          const correctId = result.user.uid;
+          const correctedUser = { ...existingUserFromDb, id: correctId };
+          
+          try {
+            await addUser(correctedUser);
+            existingUserFromDb = correctedUser;
+            // Best effort delete the old one, might fail due to rules but that's ok
+            await deleteDoc(doc(db, "users", querySnapshot.docs[0].id)).catch(() => {});
+          } catch(e) {
+            console.error("Failed to migrate user to proper ID", e);
+          }
+        }
       }
 
       if (existingUserFromDb) {
@@ -48,6 +63,7 @@ export const LoginView: React.FC = () => {
         const isFirstUser = allUsersSnapshot.empty;
         
         const createdUser = await addUser({
+          id: result.user.uid,
           email: userEmail,
           name: result.user.displayName || userEmail.split('@')[0],
           role: isFirstUser ? 'admin' : 'teacher',
