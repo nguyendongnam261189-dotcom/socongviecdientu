@@ -87,6 +87,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     "Sử - Địa - GDCD",
     "Thể dục - QP",
     "BGH",
+    "Khác",
   ]);
   const [grades, setGrades] = useState<string[]>([
     "Khối 10",
