@@ -1,0 +1,499 @@
+import React, { useState, useEffect } from 'react';
+import { useAppContext } from '../../context/AppContext';
+import { format, parseISO } from 'date-fns';
+import { ChevronLeft, Send, Paperclip, CheckCircle2, Circle, Clock, Trash2, FileText, Download, Lock, Unlock, MessageSquareReply } from 'lucide-react';
+import { Task } from '../../types';
+import { cn, canDeleteTask, canEditTask } from '../../utils';
+
+interface TaskDetailProps {
+  task: Task;
+  onBack: () => void;
+}
+
+export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
+  const { comments, users, currentUser, addComment, updateTaskStatus, deleteTask, submitReport, showToast, markTaskRead } = useAppContext();
+  
+  useEffect(() => {
+    markTaskRead(task.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task.id]);
+
+  const [newComment, setNewComment] = useState('');
+  const [replyToId, setReplyToId] = useState<string | null>(null);
+  
+  // Report state
+  const [reportContent, setReportContent] = useState(task.submissions?.find(r => r.userId === currentUser?.id)?.content || '');
+  const [reportUrl, setReportUrl] = useState(task.submissions?.find(r => r.userId === currentUser?.id)?.fileUrl || '');
+  const [reportData, setReportData] = useState<Record<string, string | number>>(() => {
+    if (!currentUser || !task.reportPrefill) return {};
+    return task.reportPrefill[currentUser.id] || {};
+  });
+
+  const getIsPrefilled = (fieldId: string) => {
+    if (!currentUser || !task.reportPrefill || !task.reportPrefill[currentUser.id]) return false;
+    const val = task.reportPrefill[currentUser.id][fieldId];
+    return val !== undefined && val !== '';
+  };
+
+  const taskComments = comments.filter(c => c.taskId === task.id);
+  const author = users.find(u => u.id === task.createdBy);
+  const canModify = canDeleteTask(task, currentUser, users) || canEditTask(task, currentUser, users);
+  const canComment = task.assignedTo?.includes(currentUser?.id || '') || false;
+  const isReport = !!task.reportTemplate;
+  const myReport = task.submissions?.find(r => r.userId === currentUser?.id);
+
+  const handleSend = () => {
+    if (!newComment.trim()) return;
+    addComment(task.id, newComment, replyToId);
+    setNewComment('');
+    setReplyToId(null);
+  };
+
+  const toggleStatus = () => {
+    if (isReport) return; // For tasks with report template, prevent status toggle.
+    const oldStatus = task.status;
+    const newStatus = task.status === 'done' ? 'todo' : 'done';
+    updateTaskStatus(task.id, newStatus);
+    showToast(
+      newStatus === 'done' ? 'Đã đánh dấu hoàn thành' : 'Đã chuyển về chưa làm',
+      () => updateTaskStatus(task.id, oldStatus)
+    );
+  };
+
+  const handleDelete = () => {
+    if (window.confirm('Bạn có chắc chắn muốn xóa công việc này?')) {
+      deleteTask(task.id);
+      onBack();
+    }
+  };
+
+  const handleSubmitReport = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportContent.trim() && !reportUrl.trim() && Object.keys(reportData).length === 0) return;
+    
+    if (!window.confirm("Bạn có chắc chắn muốn nộp báo cáo này không? Bạn có thể cập nhật lại sau.")) {
+      return;
+    }
+
+    submitReport(task.id, reportContent, reportUrl, reportData);
+    showToast('Đã nộp báo cáo thành công');
+  };
+
+  const handleReportDataChange = (id: string, val: string | number) => {
+    setReportData(prev => ({ ...prev, [id]: val }));
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, fieldId: string) => {
+     const file = e.target.files?.[0];
+     if (file) {
+       const reader = new FileReader();
+       reader.onload = (event) => {
+         const url = event.target?.result as string;
+         // Store URL directly in reportData
+         handleReportDataChange(fieldId, url);
+       };
+       reader.readAsDataURL(file);
+     }
+  };
+
+  // Render logic for admin report table
+  const renderAdminReportTable = () => {
+    if (!task.reportTemplate || task.reportTemplate.length === 0) return null;
+    
+    // Compute sums for numbers
+    const sums: Record<string, number> = {};
+    task.reportTemplate.filter(f => f.type === 'number').forEach(f => {
+      sums[f.id] = task.assignedTo.reduce((acc, uid) => {
+        const r = task.submissions?.find(rep => rep.userId === uid);
+        const val = r ? r.data?.[f.id] : task.reportPrefill?.[uid]?.[f.id];
+        return acc + (val ? Number(val) : 0);
+      }, 0);
+    });
+
+    return (
+      <div className="mt-4 overflow-x-auto bg-white border border-slate-200 rounded-xl shadow-sm">
+        <table className="w-full text-left text-sm whitespace-nowrap">
+          <thead className="bg-slate-50 border-b border-slate-200">
+            <tr>
+              <th className="px-4 py-3 font-bold text-slate-600">Giáo viên</th>
+              <th className="px-4 py-3 font-bold text-slate-600">Trạng thái</th>
+              {task.reportTemplate.map(f => (
+                <th key={f.id} className="px-4 py-3 font-bold text-slate-600">{f.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {task.assignedTo.map(uid => {
+              const u = users.find(user => user.id === uid);
+              const r = task.submissions?.find(rep => rep.userId === uid);
+              return (
+                <tr key={uid} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-4 py-3 font-medium text-slate-800">{u?.name || uid}</td>
+                  <td className="px-4 py-3">
+                    {r ? <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-lg border border-emerald-200">Đã nộp</span> : <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100">Chưa nộp</span>}
+                  </td>
+                  {task.reportTemplate!.map(f => {
+                    const preVal = task.reportPrefill?.[uid]?.[f.id];
+                    const val = r ? r.data?.[f.id] : preVal;
+                    const hasPrefill = preVal !== undefined && preVal !== '';
+                    return (
+                    <td key={f.id} className={cn("px-4 py-3", hasPrefill ? "bg-emerald-50/30 font-medium text-emerald-800" : "text-slate-600")}>
+                      {f.type === 'file' ? (
+                         val ? <a href={String(val)} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">Xem tệp</a> : '-'
+                      ) : (
+                         val || '-'
+                      )}
+                    </td>
+                  )})}
+                </tr>
+              )
+            })}
+            {task.reportTemplate.some(f => f.type === 'number') && (
+              <tr className="bg-indigo-50/50 font-bold">
+                <td className="px-4 py-3 text-indigo-800" colSpan={2}>Tổng cộng</td>
+                {task.reportTemplate.map(f => (
+                  <td key={f.id} className="px-4 py-3 text-indigo-800">
+                    {f.type === 'number' ? sums[f.id] : '-'}
+                  </td>
+                ))}
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  return (
+    <div className="absolute inset-0 bg-slate-50 z-30 flex flex-col animate-in slide-in-from-right-8 duration-200">
+      {/* Header */}
+      <div className="bg-white px-4 h-14 flex items-center gap-3 border-b border-slate-200 flex-shrink-0 justify-between">
+        <div className="flex items-center gap-3 overflow-hidden">
+          <button onClick={onBack} className="p-2 -ml-2 text-slate-500 hover:text-slate-900 rounded-full hover:bg-slate-100 shrink-0">
+            <ChevronLeft className="w-6 h-6" />
+          </button>
+          <h2 className="font-semibold text-lg truncate leading-tight">Chi tiết công việc</h2>
+        </div>
+        {canModify && (
+          <div className="flex gap-1 shrink-0 -mr-2">
+            {task.category !== 'announcement' && (
+              <button 
+                onClick={() => useAppContext().toggleCommentsLock(task.id)} 
+                className={cn("p-2 rounded-full transition-colors shrink-0", task.commentsLocked ? "text-slate-500 hover:bg-slate-100" : "text-amber-500 hover:bg-amber-50")}
+                title={task.commentsLocked ? "Mở khóa bình luận" : "Khóa bình luận"}
+              >
+                {task.commentsLocked ? <Unlock className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
+              </button>
+            )}
+            <button onClick={handleDelete} className="p-2 text-rose-500 hover:bg-rose-50 rounded-full transition-colors shrink-0">
+              <Trash2 className="w-5 h-5" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-4 bg-white border-b border-slate-200">
+          <div className="flex gap-3 items-start">
+            {isReport ? (
+              <div className="mt-1 text-slate-400">
+                {myReport ? <CheckCircle2 className="w-7 h-7 text-emerald-500" /> : <FileText className="w-7 h-7 text-amber-500" />}
+              </div>
+            ) : (
+              <button onClick={toggleStatus} className="mt-1 text-slate-400">
+                {task.status === 'done' ? <CheckCircle2 className="w-7 h-7 text-emerald-500" /> : <Circle className="w-7 h-7" />}
+              </button>
+            )}
+            <div className="flex-1 min-w-0">
+              <h1 className="text-xl font-bold text-slate-900">{task.title}</h1>
+              <div className="flex flex-wrap items-center gap-2 mt-2 text-[10px] sm:text-xs">
+                <span className="bg-slate-100 px-2 py-0.5 rounded-md font-bold text-slate-600 border shadow-sm">
+                  Giao bởi: {author?.name || 'Admin'}
+                </span>
+                {task.deadline && (
+                  <span className="flex items-center gap-1 text-rose-600 bg-rose-50 px-2 py-0.5 border border-rose-100 shadow-sm rounded-md font-bold tracking-wide">
+                    <Clock className="w-3.5 h-3.5" /> 
+                    Hạn: {format(parseISO(task.deadline), 'HH:mm dd/MM/yyyy')}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          <div className="mt-4 text-slate-700 whitespace-pre-wrap leading-relaxed text-[13px] bg-slate-50 p-4 rounded-xl border border-slate-100 shadow-inner">
+            {task.description}
+          </div>
+
+          {task.attachments && task.attachments.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Tệp đính kèm ({task.attachments.length})</h4>
+              {task.attachments.map((att, idx) => (
+                <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:bg-indigo-50 hover:border-indigo-200 transition-colors cursor-pointer text-sm shadow-sm group">
+                  <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                    <Paperclip className="w-4 h-4" />
+                  </div>
+                  <span className="font-bold text-slate-700 truncate flex-1">{att.title}</span>
+                  <Download className="w-4 h-4 text-slate-400 group-hover:text-indigo-600" />
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Report Submission Section */}
+        {isReport && (
+          <div className="p-4 bg-white border-b border-slate-200">
+            <div className="flex justify-between items-center mb-4">
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Nộp báo cáo</h4>
+            </div>
+            {myReport ? (
+              <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-400"></div>
+                <div className="flex gap-2 items-center mb-3 text-emerald-700 font-bold text-sm">
+                  <CheckCircle2 className="w-5 h-5" />
+                  Bạn đã nộp báo cáo
+                </div>
+                {myReport.content && (
+                  <div className="bg-white rounded-xl p-3 text-sm text-slate-700 shadow-sm border border-emerald-50 mb-2">
+                    <div className="font-medium whitespace-pre-wrap">{myReport.content}</div>
+                  </div>
+                )}
+                {myReport.fileUrl && (
+                  <a href={myReport.fileUrl} target="_blank" rel="noreferrer" className="text-sm font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 mt-2 bg-indigo-50 px-3 py-2 rounded-xl border border-indigo-100 transition-colors w-fit">
+                    <FileText className="w-4 h-4" /> Xem tệp / link đính kèm
+                  </a>
+                )}
+                {task.reportTemplate && task.reportTemplate.length > 0 && myReport.data && (
+                  <div className="bg-white rounded-xl p-3 text-sm text-slate-700 shadow-sm border border-emerald-50 mt-2 space-y-2">
+                    {task.reportTemplate.map(f => (
+                      <div key={f.id} className="flex flex-col">
+                        <span className="text-[10px] uppercase font-bold text-slate-400">{f.label}</span>
+                        {f.type === 'file' ? (
+                          myReport.data![f.id] ? <a href={String(myReport.data![f.id])} target="_blank" className="text-indigo-600 font-medium">Link tệp</a> : '-'
+                        ) : (
+                          <span className="font-medium">{myReport.data![f.id] || '-'}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="text-[10px] text-emerald-600/70 font-bold mt-3">
+                  Nộp lúc: {format(parseISO(myReport.submittedAt), 'HH:mm dd/MM/yyyy')}
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitReport} className="space-y-3 bg-amber-50/50 p-4 rounded-2xl border border-amber-100 shadow-sm">
+                
+                {task.reportTemplate && task.reportTemplate.length > 0 && (
+                  <div className="space-y-3 mb-4">
+                    <p className="text-xs font-bold text-slate-600">Điền các thông tin sau:</p>
+                    {task.reportTemplate.map(f => {
+                      const isPrefilled = getIsPrefilled(f.id);
+                      return (
+                      <div key={f.id}>
+                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                          {f.label} {isPrefilled && <span className="text-emerald-500 ml-1">(Đã điền sẵn)</span>}
+                        </label>
+                        {f.type === 'number' ? (
+                          <input 
+                            type="number"
+                            value={reportData[f.id] || ''}
+                            onChange={e => handleReportDataChange(f.id, Number(e.target.value))}
+                            className={cn("w-full border text-sm rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all font-medium", isPrefilled ? "bg-slate-100 border-transparent text-slate-500 cursor-not-allowed" : "bg-white border-slate-200 text-slate-800 shadow-inner")}
+                            required={f.required}
+                            disabled={isPrefilled}
+                          />
+                        ) : f.type === 'file' ? (
+                          <input 
+                            type="file"
+                            onChange={e => handleFileUpload(e, f.id)}
+                            className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-all font-medium"
+                            required={f.required && !reportData[f.id]}
+                          />
+                        ) : (
+                          <input 
+                            type="text"
+                            value={reportData[f.id] || ''}
+                            onChange={e => handleReportDataChange(f.id, e.target.value)}
+                            className={cn("w-full border text-sm rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all font-medium", isPrefilled ? "bg-slate-100 border-transparent text-slate-500 cursor-not-allowed" : "bg-white border-slate-200 text-slate-800 shadow-inner")}
+                            required={f.required}
+                            disabled={isPrefilled}
+                          />
+                        )}
+                      </div>
+                    )})}
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Nội dung / Ghi chú thêm <span className="font-normal normal-case text-slate-400">{!task.reportTemplate ? '' : '(Tùy chọn)'}</span></label>
+                  <textarea 
+                    value={reportContent}
+                    onChange={e => setReportContent(e.target.value)}
+                    placeholder="Nhập nội dung vắn tắt hoặc ý kiến..."
+                    className="w-full bg-white border border-slate-200 text-slate-800 text-sm rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all font-medium shadow-inner min-h-[80px]"
+                    required={!task.reportTemplate}
+                  />
+                </div>
+                {!task.reportTemplate && (
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Link đính kèm (Drive, Docs, Sheet) <span className="font-normal normal-case text-slate-400">(Tùy chọn)</span></label>
+                    <input 
+                      type="url"
+                      value={reportUrl}
+                      onChange={e => setReportUrl(e.target.value)}
+                      placeholder="https://"
+                      className="w-full bg-white border border-slate-200 text-slate-800 text-sm rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all font-medium shadow-inner"
+                    />
+                  </div>
+                )}
+                <div className="flex gap-2 mt-2">
+                  <button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2">
+                    <Send className="w-4 h-4" /> NỘP BÁO CÁO
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+
+        {/* Report Monitoring (For Creator/Admin) */}
+        {isReport && canModify && (
+          <div className="p-4 bg-white border-b border-slate-200">
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Danh sách nộp ({task.submissions?.length || 0}/{task.assignedTo.length})</h4>
+            
+            {task.reportTemplate && task.reportTemplate.length > 0 ? (
+              renderAdminReportTable()
+            ) : (
+              <div className="space-y-2">
+                {task.assignedTo.map(uid => {
+                  const isSubmitted = task.submissions?.find(r => r.userId === uid);
+                  const userName = users.find(u => u.id === uid)?.name || uid;
+                  return (
+                    <div key={uid} className="flex justify-between items-center p-3 rounded-xl border bg-slate-50">
+                      <div className="flex items-center gap-2">
+                        <div className={cn("w-2 h-2 rounded-full", isSubmitted ? "bg-emerald-500" : "bg-rose-400")}></div>
+                        <span className="font-bold text-sm text-slate-700">{userName}</span>
+                      </div>
+                      {isSubmitted ? (
+                        <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-lg border border-emerald-200">Đã nộp</span>
+                      ) : (
+                        <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100">Chưa nộp</span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Comments section */}
+        {task.category !== 'announcement' && (
+        <div className="p-4 bg-slate-50">
+          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Trao đổi ({taskComments.length})</h4>
+          <div className="space-y-4 pb-4">
+            {taskComments.filter(c => !c.parentId).map(c => {
+              const u = users.find(user => user.id === c.userId);
+              const isMe = c.userId === currentUser?.id;
+              const replies = taskComments.filter(r => r.parentId === c.id);
+              return (
+                <div key={c.id} className="flex flex-col gap-2">
+                  <div className={cn("flex gap-3", isMe ? "flex-row-reverse" : "flex-row")}>
+                    <div className="w-8 h-8 rounded-full bg-slate-200 flex-shrink-0 flex items-center justify-center text-xs font-bold text-slate-500 shadow-sm border border-white">
+                      {u?.name.charAt(0)}
+                    </div>
+                    <div className="flex flex-col gap-1 items-start">
+                      <div className={cn("max-w-[80%] rounded-2xl px-4 py-2.5 shadow-sm", isMe ? "bg-indigo-600 text-white rounded-tr-none self-end" : "bg-white border border-slate-100 rounded-tl-none")}>
+                        {!isMe && <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{u?.name}</div>}
+                        <div className={cn("text-[13px] leading-relaxed", isMe ? "text-white" : "text-slate-800")}>{c.content}</div>
+                        <div className={cn("text-[9px] mt-1.5 font-medium flex justify-between items-center gap-4", isMe ? "text-indigo-200" : "text-slate-400")}>
+                          <span>{format(parseISO(c.createdAt), 'HH:mm dd/MM/yyyy')}</span>
+                        </div>
+                      </div>
+                      {canComment && !task.commentsLocked && (
+                        <button onClick={() => setReplyToId(c.id)} className={cn("text-[10px] font-bold text-slate-400 hover:text-indigo-600 transition-colors flex items-center gap-1", isMe ? "self-end mr-1" : "ml-1")}>
+                          <MessageSquareReply className="w-3 h-3" /> Trả lời
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {/* Replies */}
+                  {replies.length > 0 && (
+                    <div className="pl-11 space-y-3 mt-1">
+                      {replies.map(r => {
+                        const ru = users.find(user => user.id === r.userId);
+                        const rIsMe = r.userId === currentUser?.id;
+                        return (
+                          <div key={r.id} className={cn("flex gap-2", rIsMe ? "flex-row-reverse" : "flex-row")}>
+                            <div className="w-6 h-6 rounded-full bg-slate-200 flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-slate-500 shadow-sm border border-white">
+                              {ru?.name.charAt(0)}
+                            </div>
+                            <div className={cn("max-w-[80%] rounded-2xl px-3 py-2 shadow-sm", rIsMe ? "bg-indigo-600 text-white rounded-tr-none" : "bg-white border border-slate-100 rounded-tl-none")}>
+                              {!rIsMe && <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">{ru?.name}</div>}
+                              <div className={cn("text-xs leading-relaxed", rIsMe ? "text-white" : "text-slate-800")}>{r.content}</div>
+                              <div className={cn("text-[8px] mt-1 font-medium", rIsMe ? "text-indigo-200 text-right" : "text-slate-400 text-left")}>
+                                {format(parseISO(r.createdAt), 'HH:mm dd/MM/yyyy')}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+            {taskComments.length === 0 && (
+              <div className="text-center text-slate-400 text-xs font-medium italic mt-8">Chưa có trao đổi nào.</div>
+            )}
+          </div>
+        </div>
+        )}
+      </div>
+
+      {/* Input area */}
+      {task.category !== 'announcement' && canComment && (
+      <div className="bg-white p-3 border-t border-slate-200 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)]">
+        {task.commentsLocked ? (
+          <div className="flex items-center justify-center py-2 text-slate-400 text-xs font-bold gap-1.5 bg-slate-50 rounded-xl">
+            <Lock className="w-4 h-4" /> Bình luận đã bị khóa
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {replyToId && (
+              <div className="flex justify-between items-center text-xs font-medium text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                <span>Đang trả lời <span className="font-bold">{users.find(u => u.id === comments.find(c => c.id === replyToId)?.userId)?.name}</span></span>
+                <button onClick={() => setReplyToId(null)} className="hover:text-rose-500 font-bold">Hủy</button>
+              </div>
+            )}
+            <div className="flex gap-2 items-end">
+              <textarea
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="Nhập nội dung trao đổi..."
+                className="flex-1 max-h-32 min-h-[44px] bg-slate-100 border-transparent rounded-2xl px-4 py-2.5 text-sm focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none resize-none transition-all shadow-inner"
+                rows={1}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+              />
+              <button 
+                onClick={handleSend}
+                disabled={!newComment.trim()}
+                className="w-11 h-11 flex items-center justify-center rounded-2xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:bg-slate-300 transition-colors flex-shrink-0 shadow-sm"
+              >
+                <Send className="w-5 h-5 ml-[-2px]" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+      )}
+    </div>
+  );
+};

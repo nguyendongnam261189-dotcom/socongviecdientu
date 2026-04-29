@@ -1,0 +1,208 @@
+import React, { useState } from 'react';
+import { useAppContext } from '../../context/AppContext';
+import { Settings, Plus, Trash2, Edit2, Check, X } from 'lucide-react';
+import { cn } from '../../utils';
+
+const ManageList = ({ title, items, setItems, onUpdateItem, onDeleteItem }: { 
+  title: string, 
+  items: string[], 
+  setItems: React.Dispatch<React.SetStateAction<string[]>>,
+  onUpdateItem: (oldName: string, newName: string) => void,
+  onDeleteItem: (name: string) => void
+}) => {
+  const [newItem, setNewItem] = useState('');
+  const [editingItem, setEditingItem] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+
+  const handleAdd = () => {
+    if (newItem.trim() && !items.includes(newItem.trim())) {
+      setItems([...items, newItem.trim()]);
+      setNewItem('');
+    }
+  };
+
+  const handleSaveEdit = (oldName: string) => {
+    if (editValue.trim() && editValue !== oldName && !items.includes(editValue.trim())) {
+      onUpdateItem(oldName, editValue.trim());
+    } else if (editValue.trim() === oldName) {
+      setEditingItem(null);
+    }
+    setEditingItem(null);
+  };
+
+  return (
+    <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+      <h3 className="font-bold text-slate-800 mb-4">{title}</h3>
+      
+      <div className="flex gap-2 mb-4">
+        <input 
+          type="text" 
+          value={newItem}
+          onChange={e => setNewItem(e.target.value)}
+          placeholder="Thêm mới..."
+          className="flex-1 bg-slate-50 border border-slate-200 text-sm rounded-xl px-3 py-2 outline-none focus:border-indigo-400"
+          onKeyDown={e => e.key === 'Enter' && handleAdd()}
+        />
+        <button 
+          onClick={handleAdd}
+          disabled={!newItem.trim()}
+          className="bg-indigo-100 text-indigo-700 px-3 rounded-xl disabled:opacity-50 hover:bg-indigo-200"
+        >
+          <Plus className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div className="space-y-2">
+        {items.map(item => (
+          <div key={item} className="flex items-center justify-between p-2 bg-slate-50 rounded-xl border border-slate-100">
+            {editingItem === item ? (
+              <div className="flex flex-1 gap-2 items-center">
+                <input 
+                  type="text"
+                  value={editValue}
+                  onChange={e => setEditValue(e.target.value)}
+                  className="flex-1 bg-white border border-slate-200 text-sm rounded-lg px-2 py-1 outline-none"
+                  autoFocus
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleSaveEdit(item);
+                    if (e.key === 'Escape') setEditingItem(null);
+                  }}
+                />
+                <button onClick={() => handleSaveEdit(item)} className="text-emerald-600 p-1 bg-emerald-50 rounded-lg"><Check className="w-4 h-4" /></button>
+                <button onClick={() => setEditingItem(null)} className="text-slate-400 p-1 bg-slate-100 rounded-lg"><X className="w-4 h-4" /></button>
+              </div>
+            ) : (
+              <>
+                <span className="text-sm font-medium text-slate-700 ml-2">{item}</span>
+                <div className="flex gap-1">
+                  <button 
+                    onClick={() => { setEditingItem(item); setEditValue(item); }}
+                    className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button 
+                    onClick={() => {
+                      if (window.confirm(`Xóa "${item}"? Các thành viên đang thuộc mục này sẽ bị đổi thành "Khác".`)) {
+                        onDeleteItem(item);
+                      }
+                    }}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export const SettingsView: React.FC = () => {
+  const { currentUser, departments, setDepartments, grades, setGrades, users, setUsers, documentCategories, setDocumentCategories, documents, setDocuments, gasUrl, setGasUrl } = useAppContext();
+
+  if (currentUser?.role !== 'admin') {
+    return (
+      <div className="p-8 text-center text-slate-500">
+        Bạn không có quyền truy cập trang này.
+      </div>
+    );
+  }
+
+  const handleUpdateDept = (oldName: string, newName: string) => {
+    setDepartments(prev => prev.map(d => d === oldName ? newName : d));
+    setUsers(users.map(u => u.department === oldName ? { ...u, department: newName } : u));
+  };
+
+  const handleDeleteDept = (name: string) => {
+    setDepartments(prev => prev.filter(d => d !== name));
+    setUsers(users.map(u => u.department === name ? { ...u, department: 'Khác' } : u));
+  };
+
+  const handleUpdateGrade = (oldName: string, newName: string) => {
+    setGrades(prev => prev.map(g => g === oldName ? newName : g));
+    setUsers(users.map(u => u.grade === oldName ? { ...u, grade: newName } : u));
+  };
+
+  const handleDeleteGrade = (name: string) => {
+    setGrades(prev => prev.filter(g => g !== name));
+    setUsers(users.map(u => u.grade === name ? { ...u, grade: 'Khác' } : u));
+  };
+
+  const handleUpdateDocCat = (oldName: string, newName: string) => {
+    setDocumentCategories(prev => prev.map(c => c === oldName ? newName : c));
+    setDocuments(documents.map(d => d.category === oldName ? { ...d, category: newName } : d));
+  };
+
+  const handleDeleteDocCat = (name: string) => {
+    setDocumentCategories(prev => prev.filter(c => c !== name));
+    setDocuments(documents.map(d => d.category === name ? { ...d, category: 'Khác' } : d));
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-slate-50">
+      <div className="p-4 bg-white shadow-sm z-10 sticky top-0">
+        <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+          <Settings className="w-5 h-5 text-indigo-500" /> Cài đặt hệ thống
+        </h2>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="p-4 border-b border-slate-100 bg-slate-50/50">
+            <h2 className="font-bold text-slate-800 text-sm uppercase tracking-wide">Cấu hình Google Apps Script (Tải lên Drive)</h2>
+            <p className="text-xs text-slate-500 mt-1">Sử dụng Google Apps Script Web App để tiếp nhận tải lên file và lưu vào Google Drive (chống tốn kém).</p>
+          </div>
+          <div className="p-4 space-y-4">
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">Web App URL</label>
+              <input 
+                type="url"
+                value={gasUrl}
+                onChange={e => setGasUrl(e.target.value)}
+                className="w-full text-sm bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 transition-all font-medium text-slate-700"
+                placeholder="https://script.google.com/macros/s/.../exec"
+              />
+            </div>
+            <div className="bg-blue-50 text-blue-800 p-3 rounded-xl border border-blue-100 text-sm">
+              <p className="font-bold mb-1">Hướng dẫn cài đặt:</p>
+              <ol className="list-decimal list-inside space-y-1 text-xs opacity-90">
+                <li>Truy cập <a href="https://script.google.com" target="_blank" className="font-bold underline" rel="nofollow noreferrer">script.google.com</a> tạo dự án mới.</li>
+                <li>Sử dụng doPost để xử lý tải lên nội dung Base64 và lưu File vào Drive.</li>
+                <li>Triển khai dưới dạng <b>Web App</b> (Execute as: Me, Who has access: Anyone)</li>
+                <li>Copy URL dán vào ô bên trên.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+        <ManageList 
+          title="Quản lý Nhóm tài liệu"
+          items={documentCategories}
+          setItems={setDocumentCategories}
+          onUpdateItem={handleUpdateDocCat}
+          onDeleteItem={handleDeleteDocCat}
+        />
+
+        <ManageList 
+          title="Quản lý Tổ chuyên môn"
+          items={departments}
+          setItems={setDepartments}
+          onUpdateItem={handleUpdateDept}
+          onDeleteItem={handleDeleteDept}
+        />
+
+        <ManageList 
+          title="Quản lý Nhóm / Khối"
+          items={grades}
+          setItems={setGrades}
+          onUpdateItem={handleUpdateGrade}
+          onDeleteItem={handleDeleteGrade}
+        />
+      </div>
+    </div>
+  );
+};

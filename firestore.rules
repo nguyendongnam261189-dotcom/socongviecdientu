@@ -1,0 +1,125 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 1. Only authenticated users
+    function isSignedIn() { 
+      return request.auth != null; 
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // 2. Only approved users can access
+    function isApprovedUser() {
+      return isSignedIn() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved';
+    }
+    
+    function isAdmin() {
+      return isSignedIn() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    function isLeader() {
+      return isSignedIn() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'leader';
+    }
+
+    function myDepartment() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.department;
+    }
+
+    function myRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function myGrade() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.grade;
+    }
+
+    function getTaskCreatorDepartment(createdByUid) {
+      return get(/databases/$(database)/documents/users/$(createdByUid)).data.department;
+    }
+
+    // 4. Tasks Read Helper
+    function canReadTask(resData) {
+      return 
+        isAdmin() ||
+        (resData.createdBy == request.auth.uid) ||
+        (request.auth.uid in resData.get('assignedTo', [])) ||
+        (myRole() in resData.get('targetRoles', [])) ||
+        (myDepartment() in resData.get('targetDepartments', [])) ||
+        (myGrade() in resData.get('targetGrades', []));
+    }
+
+    // 4. Tasks Write Helpers
+    function canCreateTask() {
+      return isAdmin() || isLeader();
+    }
+
+    function canManageTask(resData) {
+      return isAdmin() || (isLeader() && getTaskCreatorDepartment(resData.createdBy) == myDepartment());
+    }
+
+    function isTaskInvolved(taskId) {
+      return canReadTask(get(/databases/$(database)/documents/tasks/$(taskId)).data);
+    }
+
+    // 5. Comments write helper
+    function canAddComment(reqData) {
+      return 
+        get(/databases/$(database)/documents/tasks/$(reqData.taskId)).data.category != 'announcement' &&
+        get(/databases/$(database)/documents/tasks/$(reqData.taskId)).data.get('commentsLocked', false) == false &&
+        (request.auth.uid in get(/databases/$(database)/documents/tasks/$(reqData.taskId)).data.get('assignedTo', []));
+    }
+
+    // 3. Users: read their own profile, cannot read others unless admin
+    match /users/{userId} {
+      allow read: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if (isSignedIn() && isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['avatar'])) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // 4. TASKS COLLECTION
+    match /tasks/{taskId} {
+      allow read: if isApprovedUser() && canReadTask(resource.data);
+      
+      allow create: if isApprovedUser() && canCreateTask();
+      
+      allow update: if isApprovedUser() && (
+        canManageTask(resource.data) || 
+        // teacher: submit/update only
+        (request.auth.uid in resource.data.get('assignedTo', []) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'submissions'])) ||
+        // Involved users can update read receipts, polls, and submissions (for announcements/polls)
+        (canReadTask(resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy'])) ||
+        (canReadTask(resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['submissions'])) ||
+        (canReadTask(resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pollOptions']))
+      );
+      
+      allow delete: if isApprovedUser() && canManageTask(resource.data);
+    }
+
+    // 5. COMMENTS COLLECTION
+    match /comments/{commentId} {
+      allow read: if isApprovedUser() && isTaskInvolved(resource.data.taskId);
+      allow create: if isApprovedUser() && canAddComment(request.resource.data);
+      allow update, delete: if isApprovedUser() && isTaskInvolved(resource.data.taskId) && (isAdmin() || resource.data.userId == request.auth.uid);
+    }
+
+    // DOCUMENTS COLLECTION
+    match /documents/{documentId} {
+      allow read: if isApprovedUser();
+      allow create: if isApprovedUser();
+      allow update, delete: if isApprovedUser() && (isAdmin() || resource.data.uploadedBy == request.auth.uid);
+    }
+  }
+}

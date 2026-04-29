@@ -1,0 +1,82 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile document",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "leader", "teacher"] },
+        "department": { "type": "string" },
+        "grade": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "avatar": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["email", "name", "role", "status"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "Task, announcement, or poll",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "type": "string", "enum": ["task", "announcement", "poll"] },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "assignedTo": { "type": "array" },
+        "visibility": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["category", "title", "createdBy"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "Comment on a task",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "taskId": { "type": "string" },
+        "userId": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["taskId", "userId", "content", "createdAt"]
+    },
+    "Document": {
+      "title": "Document",
+      "description": "Uploaded document",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "url": { "type": "string" },
+        "category": { "type": "string" },
+        "uploadedBy": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["title", "url", "uploadedBy", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Users collection"
+    },
+    "/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/Task" },
+      "description": "Tasks collection"
+    },
+    "/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/Comment" },
+      "description": "Comments collection"
+    },
+    "/documents/{documentId}": {
+      "schema": { "$ref": "#/entities/Document" },
+      "description": "Documents collection"
+    }
+  }
+}

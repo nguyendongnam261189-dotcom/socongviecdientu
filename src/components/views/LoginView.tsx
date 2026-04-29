@@ -1,0 +1,97 @@
+import React, { useState } from 'react';
+import { useAppContext } from '../../context/AppContext';
+import { School, LogIn } from 'lucide-react';
+import { cn } from '../../utils';
+import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { auth } from '../../firebase';
+
+export const LoginView: React.FC = () => {
+  const { setCurrentUser, users, addUser } = useAppContext();
+  const [loading, setLoading] = useState(false);
+
+  const handleGoogleLogin = async () => {
+    try {
+      setLoading(true);
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      
+      const userEmail = result.user.email;
+      if (!userEmail) {
+        alert('Tài khoản Google của bạn không có email.');
+        return;
+      }
+      
+      // For demo purposes, we auto-map user based on email.
+      // If we don't find it, we'll assign the first user just so they can log in, or show an error.
+      const existingUser = users.find(u => u.email === userEmail);
+      if (existingUser) {
+        if (existingUser.status === 'pending') {
+          alert('Tài khoản của bạn đang chờ Admin duyệt. Vui lòng quay lại sau.');
+          auth.signOut();
+        } else if (existingUser.status === 'rejected') {
+          alert('Tài khoản của bạn đã bị từ chối.');
+          auth.signOut();
+        } else {
+          setCurrentUser(existingUser);
+        }
+      } else {
+        // Create a pending user request or admin if first user
+        const isFirstUser = users.length === 0;
+        
+        const createdUser = addUser({
+          email: userEmail,
+          name: result.user.displayName || userEmail.split('@')[0],
+          role: isFirstUser ? 'admin' : 'teacher',
+          department: isFirstUser ? 'BGH' : 'Khác',
+          grade: '',
+          status: isFirstUser ? 'approved' : 'pending',
+          avatar: result.user.photoURL || undefined
+        });
+
+        if (isFirstUser) {
+          setCurrentUser(createdUser);
+          alert('Khởi tạo tài khoản quản trị thành công.');
+        } else {
+          alert('Tài khoản của bạn đã được ghi nhận và đang chờ Admin duyệt.');
+          auth.signOut();
+        }
+      }
+    } catch (error: any) {
+      console.error(error);
+      alert('Đăng nhập thất bại: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-slate-50 items-center justify-center p-6 pb-20 relative">
+      <div className="w-full max-w-sm bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100">
+        <div className="bg-indigo-600 p-8 flex flex-col items-center text-white text-center relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-400/40 via-transparent to-transparent"></div>
+          <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center font-bold text-3xl mb-4 backdrop-blur-sm relative z-10 border border-white/30 shadow-inner">
+            <School className="w-8 h-8" />
+          </div>
+          <h1 className="text-2xl font-bold leading-tight relative z-10">Trường Học Số</h1>
+          <p className="text-indigo-200 mt-2 text-sm uppercase tracking-widest font-medium relative z-10">Hệ thống giáo viên</p>
+        </div>
+        
+        <div className="p-6 pt-8 space-y-6">
+          <button 
+            type="button"
+            onClick={handleGoogleLogin}
+            disabled={loading}
+            className="w-full bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold py-3.5 rounded-xl transition-all shadow-sm flex items-center justify-center gap-3"
+          >
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
+            {loading ? 'ĐANG XỬ LÝ...' : 'ĐĂNG NHẬP BẰNG GOOGLE'}
+          </button>
+          
+          <p className="text-center text-[10px] text-slate-400 font-medium">
+            Sử dụng tài khoản email cá nhân hay sử dụng
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};

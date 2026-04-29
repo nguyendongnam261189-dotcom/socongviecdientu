@@ -1,0 +1,235 @@
+import React, { useState } from 'react';
+import { useAppContext } from '../../context/AppContext';
+import { PieChart, TrendingUp, AlertCircle, FileText, CheckCircle2, Plus, Users as UsersIcon, Bell, Zap } from 'lucide-react';
+import { format, isPast, parseISO } from 'date-fns';
+import { TaskForm } from './TaskForm';
+import { TaskDetail } from './TaskDetail';
+import { cn, isTaskVisible } from '../../utils';
+
+export const DashboardView: React.FC = () => {
+  const { tasks: allTasks, users, currentUser, setActiveTab, showToast, toggleTaskUrgent } = useAppContext();
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+
+  const tasks = allTasks.filter(t => isTaskVisible(t, currentUser, users) && t.category === 'task');
+
+  const totalTasks = tasks.length;
+  const doneTasks = tasks.filter(t => {
+    if (t.status === 'done') return true;
+    if (t.reportTemplate) {
+      if (!t.assignedTo || t.assignedTo.length === 0) return true;
+      return t.assignedTo.every(uid => t.submissions?.some(s => s.userId === uid));
+    }
+    return false;
+  }).length;
+  
+  const completionRate = totalTasks === 0 ? 0 : Math.round((doneTasks / totalTasks) * 100);
+
+  const overdueTasks = tasks.filter(t => t.deadline && t.status !== 'done' && isPast(parseISO(t.deadline)));
+
+  // Thống kê theo tổ (Department stats)
+  const departments = Array.from(new Set(users.map(u => u.department).filter(Boolean))).filter(d => d !== 'BGH');
+  
+  const deptStats = departments.map(dept => {
+    const deptUsers = users.filter(u => u.department === dept).map(u => u.id);
+    const deptTasks = tasks.filter(t => t.assignedTo?.some(uid => deptUsers.includes(uid)));
+    const deptDone = deptTasks.filter(t => {
+      if (t.status === 'done') return true;
+      if (t.reportTemplate) {
+         const assignedInDept = t.assignedTo.filter(uid => deptUsers.includes(uid));
+         if (assignedInDept.length === 0) return true;
+         return assignedInDept.every(uid => t.submissions?.some(s => s.userId === uid));
+      }
+      return false;
+    }).length;
+    const deptOverdue = deptTasks.filter(t => t.deadline && t.status !== 'done' && isPast(parseISO(t.deadline))).length;
+    const rate = deptTasks.length === 0 ? 0 : Math.round((deptDone / deptTasks.length) * 100);
+    return { name: dept, total: deptTasks.length, done: deptDone, overdue: deptOverdue, rate };
+  });
+
+  // Pending tasks and users who haven't submitted
+  const pendingTasks = tasks.filter(t => t.status !== 'done').map(t => {
+    let pendingUids: string[] = [];
+    if (t.reportTemplate) {
+       pendingUids = (t.assignedTo || []).filter(uid => !t.submissions?.some(s => s.userId === uid));
+    } else {
+       pendingUids = t.assignedTo || [];
+    }
+    return { ...t, pendingUids };
+  }).filter(t => t.pendingUids.length > 0);
+
+  const handleRemind = (e: React.MouseEvent, uid: string) => {
+    e.stopPropagation();
+    const user = users.find(u => u.id === uid);
+    showToast(`Đã gửi nhắc nhở đến ${user?.name || 'nhân sự'}`);
+  };
+
+  const handleToggleUrgent = (e: React.MouseEvent, taskId: string) => {
+    e.stopPropagation();
+    toggleTaskUrgent(taskId);
+    showToast(`Đã thay đổi trạng thái khẩn cấp`);
+  };
+
+  if (showTaskForm) {
+    return <TaskForm onBack={() => setShowTaskForm(false)} />;
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-slate-50 overflow-y-auto p-4 space-y-6 pb-20">
+      
+      {/* Quick Actions */}
+      <div className="flex gap-2 mb-2">
+        <button 
+          onClick={() => setShowTaskForm(true)}
+          className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-2xl shadow-md shadow-indigo-600/20 flex flex-col items-center justify-center transition-all"
+        >
+          <Plus className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-bold uppercase tracking-wider">Tạo Công Việc</span>
+        </button>
+        <button 
+          onClick={() => setActiveTab('users')}
+          className="flex-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 p-3 rounded-2xl shadow-sm flex flex-col items-center justify-center transition-all"
+        >
+          <UsersIcon className="w-6 h-6 mb-1 text-emerald-500" />
+          <span className="text-[10px] font-bold uppercase tracking-wider">Nhân Sự</span>
+        </button>
+      </div>
+
+      {/* Cụm thống kê tổng quan */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center text-center">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center justify-center gap-1">
+            <FileText className="w-3 h-3" /> Tổng nhiệm vụ
+          </span>
+          <div className="text-3xl font-black text-slate-700 my-1">{totalTasks}</div>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center text-center">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center justify-center gap-1">
+            <TrendingUp className="w-3 h-3" /> Tiến độ chung
+          </span>
+          <div className="text-3xl font-black text-indigo-600 my-1">{completionRate}%</div>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center text-center col-span-2">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center justify-center gap-1">
+            <AlertCircle className="w-3 h-3" /> Trễ hạn
+          </span>
+          <div className="text-3xl font-black text-rose-500 my-1">{overdueTasks.length}</div>
+          <p className="text-[9px] text-slate-400 font-medium">CẦN ĐÔN ĐỐC</p>
+        </div>
+      </div>
+
+      {/* Thống kê theo tổ */}
+      <div>
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 ml-1 flex items-center gap-1.5">
+          <PieChart className="w-4 h-4" /> Thống kê theo tổ chuyên môn
+        </h3>
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          {deptStats.map((dept, idx) => (
+            <div key={dept.name} className={`p-4 ${idx !== deptStats.length - 1 ? 'border-b border-slate-100' : ''}`}>
+              <div className="flex justify-between items-center mb-2">
+                <span className="font-bold text-sm text-slate-700">Tổ {dept.name}</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                  {dept.done}/{dept.total} Hoàn thành
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden shadow-inner">
+                  <div 
+                    className={`h-full rounded-full transition-all duration-500 ${dept.rate >= 80 ? 'bg-emerald-500' : dept.rate >= 50 ? 'bg-amber-400' : 'bg-rose-500'}`} 
+                    style={{ width: `${dept.rate}%` }}
+                  ></div>
+                </div>
+                <span className="text-xs font-black text-slate-700 w-8 text-right">{dept.rate}%</span>
+              </div>
+              {dept.overdue > 0 && (
+                <div className="mt-2 text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-1 rounded inline-block">
+                  {dept.overdue} việc trễ hạn
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* Chưa nộp / Chưa hoàn thành */}
+      {pendingTasks.length > 0 && (
+        <div>
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 ml-1 flex items-center gap-1.5">
+            <UsersIcon className="w-4 h-4" /> Chưa nộp / Chưa hoàn thành
+          </h3>
+          <div className="space-y-3">
+            {pendingTasks.map(task => {
+              const overdue = task.deadline && isPast(parseISO(task.deadline));
+              
+              return (
+                <div 
+                  key={task.id} 
+                  onClick={() => setSelectedTaskId(task.id)}
+                  className={cn(
+                     "bg-white p-3.5 rounded-2xl shadow-sm border relative overflow-hidden cursor-pointer hover:shadow-md transition-all active:scale-[0.99]",
+                     overdue ? "border-rose-100 border-l-4 border-l-rose-500" : "border-slate-200 border-l-4 border-l-amber-500",
+                     task.isUrgent && "ring-2 ring-rose-500 ring-offset-2"
+                  )}
+                >
+                  <div className="flex justify-between items-start mb-2">
+                     <h4 className="font-bold text-sm text-slate-800 pr-2 line-clamp-2">{task.title}</h4>
+                     <button
+                        onClick={(e) => handleToggleUrgent(e, task.id)}
+                        className={cn(
+                           "p-1.5 rounded-md flex-shrink-0 transition-colors z-10",
+                           task.isUrgent ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                        )}
+                        title="Đánh dấu khẩn cấp"
+                     >
+                        <Zap className={cn("w-4 h-4", task.isUrgent && "fill-rose-500")} />
+                     </button>
+                  </div>
+                  
+                  <div className="mt-1 mb-3 text-[10px] uppercase font-bold tracking-wider">
+                     {overdue ? (
+                        <span className="text-rose-500 flex items-center gap-1"><AlertCircle className="w-3 h-3"/> Trễ hạn ({task.deadline ? format(parseISO(task.deadline), 'dd/MM') : ''})</span>
+                     ) : (
+                        <span className="text-amber-600">Đang thực hiện</span>
+                     )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Danh sách chưa hoàn thành:</p>
+                     <div className="flex flex-col gap-1.5">
+                        {task.pendingUids.map(uid => {
+                           const user = users.find(u => u.id === uid);
+                           if (!user) return null;
+                           return (
+                              <div key={uid} className="flex justify-between items-center bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-100">
+                                 <div className="flex flex-col">
+                                    <span className="text-xs font-bold text-slate-700">{user.name}</span>
+                                    <span className="text-[9px] text-slate-500">{user.department}</span>
+                                 </div>
+                                 <button 
+                                    onClick={(e) => handleRemind(e, uid)}
+                                    className="p-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-md transition-colors z-10"
+                                    title="Nhắc nhở"
+                                 >
+                                    <Bell className="w-3.5 h-3.5" />
+                                 </button>
+                              </div>
+                           )
+                        })}
+                     </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {selectedTaskId && (
+        <TaskDetail task={allTasks.find(t => t.id === selectedTaskId)!} onBack={() => setSelectedTaskId(null)} />
+      )}
+    </div>
+  );
+};
+

@@ -1,0 +1,87 @@
+export type Role = 'admin' | 'leader' | 'teacher';
+export type UserStatus = 'pending' | 'approved' | 'rejected' | 'invited';
+
+export interface User {
+  id: string; // auth UID
+  email: string;
+  name: string;
+  role: Role;
+  department: string;
+  grade: string; // single grade for simplicity as per spec
+  status: UserStatus;
+  avatar?: string;
+  phone?: string;
+  createdAt: string;
+}
+
+export type TaskStatus = 'todo' | 'doing' | 'done';
+export type TaskCategory = 'announcement' | 'poll' | 'discussion' | 'task';
+
+export interface PollOption {
+  id: string;
+  text: string;
+  votes: string[]; // User IDs
+}
+
+export interface Submission {
+  userId: string;
+  fileUrl?: string;
+  content?: string;
+  data?: Record<string, string | number>;
+  submittedAt: string;
+}
+
+export interface Task {
+  id: string;
+  category: TaskCategory;
+  title: string;
+  description: string;
+  createdBy: string;
+  assignedTo: string[]; // User IDs
+  targetRoles?: string[];
+  targetDepartments?: string[];
+  targetGrades?: string[];
+  deadline?: string; // ISO date string
+
+  // For tasks
+  status?: TaskStatus;
+  visibility?: 'public' | 'private';
+  submissions?: Submission[];
+  isUrgent?: boolean;
+  commentsLocked?: boolean;
+  
+  // For 'announcement' & tasks
+  readBy?: string[];
+  
+  // For 'poll'
+  pollOptions?: PollOption[];
+  pollMultipleChoice?: boolean;
+  isLocked?: boolean;
+
+  attachments?: { title: string; url: string; category?: string }[];
+  createdAt: string;
+}
+
+export interface Comment {
+  id: string;
+  taskId: string;
+  parentId: string | null;
+  userId: string;
+  content: string;
+  createdAt: string;
+  isPinned?: boolean;
+}
+
+export interface Document {
+  id: string;
+  title: string;
+  driveUrl: string;
+  targetRole?: Role;
+  targetDepartment?: string;
+  category?: string;
+  createdAt: string;
+  createdBy: string;
+}
+
+export type TabType = 'dashboard' | 'users' | 'tasks' | 'timeline' | 'notifications' | 'documents' | 'settings';
+
