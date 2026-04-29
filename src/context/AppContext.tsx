@@ -119,20 +119,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Firestore listeners
   useEffect(() => {
-    if (!currentUser) {
-      // Don't clear lists immediately, so LoginView won't think users.length === 0 unless it really is
-      const unsubscribeUsers = onSnapshot(
-        collection(db, "users"),
-        (snapshot) => {
-          setUsers(
-            snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as User),
-          );
-        },
-        (error) => {
-          console.error("Error fetching users:", error);
-        },
-      );
-      return () => unsubscribeUsers();
+    // If not authenticated in Firebase at all, do not listen
+    if (!auth.currentUser && !currentUser) {
+       return;
     }
 
     const unsubs: (() => void)[] = [];
@@ -152,7 +141,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     );
 
     let tasksQuery = query(collection(db, "tasks"));
-    if (currentUser.role !== "admin") {
+    if (currentUser && currentUser.role !== "admin") {
       const conditionFilters = [
         where("assignedTo", "array-contains", currentUser.id),
         where("createdBy", "==", currentUser.id)
