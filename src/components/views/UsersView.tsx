@@ -311,7 +311,7 @@ export const UsersView: React.FC = () => {
               className="bg-slate-50 border border-slate-200 text-sm rounded-xl px-3 py-2 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 font-medium text-slate-600"
             >
               <option value="all">Tất cả các Tổ</option>
-              {departments.map(d => <option key={d} value={d}>Tổ {d}</option>)}
+              {Array.from(new Set([...departments, ...users.filter(u => u.status === 'approved').map(u => u.department || 'Chưa phân bổ')])).map(d => <option key={d} value={d}>Tổ {d}</option>)}
             </select>
           </div>
         </div>
@@ -365,11 +365,12 @@ export const UsersView: React.FC = () => {
           </div>
         )}
 
-        {departments.map(dept => {
+        {Array.from(new Set([...departments, ...users.filter(u => u.status === 'approved').map(u => u.department || 'Chưa phân bổ')])).map(dept => {
           if (filterDept !== 'all' && dept !== filterDept) return null;
           
           const deptUsers = users.filter(u => {
-            if (u.department !== dept) return false;
+            const userDept = u.department || 'Chưa phân bổ';
+            if (userDept !== dept) return false;
             if (u.status !== 'approved') return false;
             if (searchQuery) {
                const q = searchQuery.toLowerCase();
