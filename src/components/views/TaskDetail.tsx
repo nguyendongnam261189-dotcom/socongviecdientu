@@ -6,6 +6,8 @@ import { Task } from '../../types';
 import { cn, canDeleteTask, canEditTask } from '../../utils';
 import * as XLSX from 'xlsx';
 
+import { TaskForm } from './TaskForm';
+
 interface TaskDetailProps {
   task: Task;
   onBack: () => void;
@@ -77,6 +79,8 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
   const [isUploadingFiles, setIsUploadingFiles] = useState(false);
   const [uploadProgressState, setUploadProgressState] = useState('');
   
+  const [isEditingTask, setIsEditingTask] = useState(false);
+
   useEffect(() => {
     markTaskRead(task.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -133,6 +137,10 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
       onBack();
     }
   };
+
+  if (isEditingTask) {
+    return <TaskForm initialTask={task} onBack={() => setIsEditingTask(false)} />;
+  }
 
   const handleSubmitReport = (e: React.FormEvent) => {
     e.preventDefault();
@@ -344,6 +352,9 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
                 {task.commentsLocked ? <Unlock className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
               </button>
             )}
+            <button onClick={() => setIsEditingTask(true)} className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-full transition-colors shrink-0">
+              <Edit2 className="w-5 h-5" />
+            </button>
             <button onClick={handleDelete} className="p-2 text-rose-500 hover:bg-rose-50 rounded-full transition-colors shrink-0">
               <Trash2 className="w-5 h-5" />
             </button>
