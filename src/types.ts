@@ -47,6 +47,11 @@ export interface Task {
   status?: TaskStatus;
   visibility?: 'public' | 'private';
   submissions?: Submission[];
+  submissionLink?: string;
+  dataCollection?: {
+    enabled: boolean;
+    fields: { id: string; name: string; type: 'text' | 'number' }[];
+  };
   isUrgent?: boolean;
   commentsLocked?: boolean;
   
