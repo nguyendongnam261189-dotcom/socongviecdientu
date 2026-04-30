@@ -239,7 +239,8 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
       const u = users.find(user => user.id === uid);
       const name = u?.name || uid;
       const r = task.submissions?.find(rep => rep.userId === uid);
-      const status = r ? 'Đã nộp' : 'Chưa nộp';
+      const isRead = task.readBy?.includes(uid);
+      const status = r?.status === 'done' || (r && !r.status) ? 'Đã hoàn thành' : (r?.status === 'doing' || r?.status === 'acknowledged') ? 'Đã nắm thông tin/Đang làm' : isRead ? 'Đã xem' : 'Chưa làm';
       
       const rowData = [name, status];
       task.reportTemplate!.forEach(f => {
@@ -297,7 +298,10 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
                 <tr key={uid} className="hover:bg-slate-50 transition-colors">
                   <td className="px-4 py-3 font-medium text-slate-800">{u?.name || uid}</td>
                   <td className="px-4 py-3">
-                    {r ? <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-lg border border-emerald-200">Đã nộp</span> : <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100">Chưa nộp</span>}
+                    {r?.status === 'done' || (r && !r.status) ? <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-lg border border-emerald-200">Đã hoàn thành</span> : 
+                     (r?.status === 'doing' || r?.status === 'acknowledged') ? <span className="text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-lg border border-amber-200">Đã nắm thông tin/Đang làm</span> : 
+                     task.readBy?.includes(uid) ? <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">Đã xem</span> :
+                     <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100">Chưa làm</span>}
                   </td>
                   {task.reportTemplate!.map(f => {
                     const preVal = task.reportPrefill?.[uid]?.[f.id];
@@ -366,14 +370,18 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
       <div className="flex-1 overflow-y-auto">
         <div className="p-4 bg-white border-b border-slate-200">
           <div className="flex gap-3 items-start">
-            {isReport ? (
+            {task.category === 'announcement' || task.category === 'poll' ? (
               <div className="mt-1 text-slate-400">
-                {myReport ? <CheckCircle2 className="w-7 h-7 text-emerald-500" /> : <FileText className="w-7 h-7 text-amber-500" />}
+                <FileText className="w-7 h-7 text-sky-500" />
+              </div>
+            ) : isReport ? (
+              <div className="mt-1 text-slate-400">
+                {myReport?.status === 'done' || (!myReport?.status && myReport) ? <CheckCircle2 className="w-7 h-7 text-emerald-500" /> : <FileText className="w-7 h-7 text-amber-500" />}
               </div>
             ) : (
-              <button onClick={toggleStatus} className="mt-1 text-slate-400">
-                {task.status === 'done' ? <CheckCircle2 className="w-7 h-7 text-emerald-500" /> : <Circle className="w-7 h-7" />}
-              </button>
+              <div className="mt-1 text-slate-400">
+                {myReport?.status === 'done' || task.status === 'done' ? <CheckCircle2 className="w-7 h-7 text-emerald-500" /> : <Circle className="w-7 h-7" />}
+              </div>
             )}
             <div className="flex-1 min-w-0">
               <h1 className="text-xl font-bold text-slate-900">{task.title}</h1>
@@ -401,6 +409,33 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
               {task.attachments.map((att, idx) => (
                 <FilePreview key={idx} title={att.title} url={att.url} />
               ))}
+            </div>
+          )}
+
+          {/* User Status Bar */}
+          {task.category === 'task' && currentUser && task.assignedTo?.includes(currentUser.id) && (
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Trạng thái của bạn</h4>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => submitReport(task.id, myReport?.content || '', myReport?.fileUrl, myReport?.data, 'doing')}
+                  className={cn("px-3 py-1.5 rounded-lg border text-[11px] sm:text-xs font-bold transition-all", 
+                    myReport?.status === 'doing' || myReport?.status === 'acknowledged' ? "bg-amber-50 text-amber-700 border-amber-200 shadow-sm" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                  )}
+                >
+                  <span className="flex items-center gap-1.5"><Clock className={cn("w-3.5 h-3.5", myReport?.status === 'doing' || myReport?.status === 'acknowledged' ? "text-amber-600" : "text-transparent")} /> Đã nắm thông tin/Đang làm</span>
+                </button>
+                {!isReport && (
+                  <button 
+                    onClick={() => submitReport(task.id, myReport?.content || '', myReport?.fileUrl, myReport?.data, 'done')}
+                    className={cn("px-3 py-1.5 rounded-lg border text-[11px] sm:text-xs font-bold transition-all", 
+                      myReport?.status === 'done' ? "bg-emerald-50 text-emerald-700 border-emerald-200 shadow-sm" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                    )}
+                  >
+                    <span className="flex items-center gap-1.5"><CheckCircle2 className={cn("w-3.5 h-3.5", myReport?.status === 'done' ? "text-emerald-600" : "text-transparent")} /> Đã hoàn thành</span>
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -556,10 +591,14 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
         )}
 
         {/* Report Monitoring (For Creator/Admin) */}
-        {isReport && canModify && (
+        {task.category !== 'poll' && canModify && (
           <div className="p-4 bg-white border-b border-slate-200">
             <div className="flex justify-between items-center mb-4">
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Danh sách nộp ({task.submissions?.length || 0}/{task.assignedTo.length})</h4>
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                {task.category === 'announcement' ? `Đã xem (${task.readBy?.length || 0}/${task.assignedTo?.length || 0})` : 
+                 isReport ? `Danh sách nộp (${task.submissions?.filter(s => s.status === 'done' || (!s.status && s.fileUrl)).length || 0}/${task.assignedTo.length})` :
+                 `Trạng thái (${task.submissions?.filter(s => s.status === 'done').length || 0}/${task.assignedTo.length})`}
+              </h4>
               {task.reportTemplate && task.reportTemplate.length > 0 && (
                 <button 
                   onClick={exportToExcel}
@@ -574,20 +613,32 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
               renderAdminReportTable()
             ) : (
               <div className="space-y-2">
-                {task.assignedTo.map(uid => {
-                  const isSubmitted = task.submissions?.find(r => r.userId === uid);
+                {task.assignedTo?.map(uid => {
+                  const isRead = task.readBy?.includes(uid);
+                  const sub = task.submissions?.find(r => r.userId === uid);
                   const userName = users.find(u => u.id === uid)?.name || uid;
+                  
+                  let badge = <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100">Chưa xem</span>;
+                  if (task.category === 'announcement') {
+                    if (isRead) badge = <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-lg border border-emerald-200">Đã xem</span>;
+                  } else {
+                    if (sub?.status === 'done' || (sub && !sub.status)) {
+                      badge = <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-lg border border-emerald-200">Đã hoàn thành</span>;
+                    } else if (sub?.status === 'doing' || sub?.status === 'acknowledged') {
+                      badge = <span className="text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-lg border border-amber-200">Đã nắm thông tin/Đang làm</span>;
+                    } else if (isRead) {
+                      badge = <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">Đã xem</span>;
+                    } else {
+                      badge = <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100">Chưa làm</span>;
+                    }
+                  }
+
                   return (
                     <div key={uid} className="flex justify-between items-center p-3 rounded-xl border bg-slate-50">
                       <div className="flex items-center gap-2">
-                        <div className={cn("w-2 h-2 rounded-full", isSubmitted ? "bg-emerald-500" : "bg-rose-400")}></div>
                         <span className="font-bold text-sm text-slate-700">{userName}</span>
                       </div>
-                      {isSubmitted ? (
-                        <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-lg border border-emerald-200">Đã nộp</span>
-                      ) : (
-                        <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100">Chưa nộp</span>
-                      )}
+                      {badge}
                     </div>
                   )
                 })}
