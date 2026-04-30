@@ -114,6 +114,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
   const setGasUrl = (url: string) => {
     setGasUrlState(url);
     localStorage.setItem("gasUrl", url);
+    if (authReady) {
+       setDoc(doc(db, "settings", "system"), { gasUrl: url }, { merge: true });
+    }
   };
 
   const [authReady, setAuthReady] = useState(false);
@@ -126,6 +129,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     }
 
     const unsubs: (() => void)[] = [];
+
+    unsubs.push(
+      onSnapshot(
+        doc(db, "settings", "system"),
+        (snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.data();
+            if (data.departments) setDepartments(data.departments);
+            if (data.grades) setGrades(data.grades);
+            if (data.documentCategories) setDocumentCategories(data.documentCategories);
+            if (data.gasUrl) setGasUrlState(data.gasUrl);
+          } else {
+            // First time, create it
+            if (currentUser?.role === 'admin') {
+               setDoc(doc(db, "settings", "system"), {
+                 departments,
+                 grades,
+                 documentCategories,
+                 gasUrl: gasUrlState
+               }, { merge: true });
+            }
+          }
+        },
+        (error) => console.error("Error fetching settings:", error)
+      )
+    );
 
     unsubs.push(
       onSnapshot(
@@ -521,18 +550,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
           (r: any) => r.userId === currentUser.id,
         );
 
+        let newSubmissions = [...submissions];
         if (existingIndex >= 0) {
-          throw new Error("You have already submitted this report.");
+          newSubmissions[existingIndex] = {
+            ...newSubmissions[existingIndex],
+            content: content,
+            fileUrl: url || "",
+            data: data,
+            submittedAt: new Date().toISOString(),
+          };
+        } else {
+          newSubmissions.push({
+            userId: currentUser.id,
+            fileUrl: url || "",
+            content: content,
+            data: data,
+            submittedAt: new Date().toISOString(),
+          });
         }
-
-        const newSubmission = {
-          userId: currentUser.id,
-          fileUrl: url || "",
-          content: content,
-          data: data,
-          submittedAt: new Date().toISOString(),
-        };
-        const newSubmissions = [...submissions, newSubmission];
         
         const updateData: any = { submissions: newSubmissions };
         
