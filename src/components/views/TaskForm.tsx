@@ -28,6 +28,13 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack }) => {
   const [deadline, setDeadline] = useState(new Date(Date.now() + 86400000).toISOString().slice(0, 16)); // Default 1 day later
   const [hasDeadline, setHasDeadline] = useState(true);
   
+  const [submissionLink, setSubmissionLink] = useState('');
+  
+  const [reportTemplateEnabled, setReportTemplateEnabled] = useState(false);
+  const [reportTemplateFields, setReportTemplateFields] = useState<{id: string, label: string, type: 'text' | 'number' | 'file', required: boolean}[]>([
+      { id: 'field-1', label: 'Nhập số liệu', type: 'number', required: false }
+  ]);
+  
   const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
   const [pollMultipleChoice, setPollMultipleChoice] = useState(false);
   
@@ -59,12 +66,15 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack }) => {
         setUploadProgress(prev => ({ ...prev, [fileName]: 50 })); // Đang tải lên Drive...
         
         try {
+          const folderPath = `QuanLyTruongHoc/${new Date().getFullYear()}/Thang_${new Date().getMonth() + 1}/${category === 'task' ? 'CongViec' : category === 'announcement' ? 'ThongBao' : category === 'poll' ? 'KhaoSat' : 'Khac'}`;
+          
           const response = await fetch(gasUrl, {
             method: 'POST',
             body: JSON.stringify({
               fileName: file.name,
               mimeType: file.type || 'application/octet-stream',
               fileData: base64Data,
+              folderPath: folderPath
             }),
             headers: {
               'Content-Type': 'text/plain;charset=utf-8',
@@ -184,6 +194,16 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack }) => {
       newTaskParams.deadline = new Date(deadline).toISOString();
     }
     
+    if (category === 'task') {
+      if (submissionLink.trim()) newTaskParams.submissionLink = submissionLink.trim();
+      if (reportTemplateEnabled) {
+        const validFields = reportTemplateFields.filter(f => f.label.trim() !== '');
+        if (validFields.length > 0) {
+          newTaskParams.reportTemplate = validFields;
+        }
+      }
+    }
+    
     if (category === 'poll') {
       newTaskParams.pollOptions = pollOptions.filter(o => o.trim() !== '').map((text, idx) => ({ id: `opt-${idx}`, text, votes: [] }));
       newTaskParams.pollMultipleChoice = pollMultipleChoice;
@@ -264,25 +284,109 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack }) => {
             </div>
 
             {category === 'task' && (
-              <div className="flex items-center gap-4 pt-2">
-                <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                  <input 
-                    type="checkbox" 
-                    checked={hasDeadline} 
-                    onChange={e => setHasDeadline(e.target.checked)}
-                    className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 border-slate-300"
-                  />
-                  Có thời hạn (Deadline)
-                </label>
-                {hasDeadline && (
-                  <input
-                    type="datetime-local"
-                    value={deadline}
-                    onChange={e => setDeadline(e.target.value)}
-                    className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 text-sm font-medium focus:ring-2 focus:ring-indigo-100 outline-none"
-                  />
-                )}
+              <>
+                <div className="flex items-center gap-4 pt-2">
+                  <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                    <input 
+                      type="checkbox" 
+                      checked={hasDeadline} 
+                      onChange={e => setHasDeadline(e.target.checked)}
+                      className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 border-slate-300"
+                    />
+                    Có thời hạn (Deadline)
+                  </label>
+                  {hasDeadline && (
+                    <input
+                      type="datetime-local"
+                      value={deadline}
+                      onChange={e => setDeadline(e.target.value)}
+                      className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 text-sm font-medium focus:ring-2 focus:ring-indigo-100 outline-none"
+                    />
+                  )}
+                </div>
+                
+                <div className="pt-4 border-t border-slate-100 mt-2 space-y-4">
+                 <div>
+                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Link Upload Từ Người Tạo (Google Form/Drive Folder)</label>
+                   <p className="text-[11px] text-slate-400 mb-2 leading-relaxed">Nếu có, người nộp sẽ truy cập đường link này để nộp bài hoặc upload file, giúp bạn quản lý chung 1 chỗ thuận tiện.</p>
+                   <input
+                     type="text"
+                     value={submissionLink}
+                     onChange={e => setSubmissionLink(e.target.value)}
+                     className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:ring-2 focus:ring-indigo-100 outline-none"
+                     placeholder="Ví dụ: https://forms.gle/... hoặc link Google Drive..."
+                   />
+                 </div>
+                 
+                 <div>
+                   <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
+                     <input 
+                       type="checkbox" 
+                       checked={reportTemplateEnabled} 
+                       onChange={e => setReportTemplateEnabled(e.target.checked)}
+                       className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 border-slate-300"
+                     />
+                     Tạo mẫu thu thập dữ liệu nhanh
+                   </label>
+                   {reportTemplateEnabled && (
+                     <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl space-y-2">
+                       <p className="text-[11px] text-slate-400 mb-2">Định nghĩa các cột dữ liệu người nhận cần điền (như file Excel). Hệ thống sẽ tự tạo bảng nhập liệu cho họ và tổng hợp tự động.</p>
+                       {reportTemplateFields.map((field, idx) => (
+                         <div key={field.id} className="flex gap-2 items-center">
+                           <input
+                             type="text"
+                             value={field.label}
+                             onChange={e => {
+                               const newFields = [...reportTemplateFields];
+                               newFields[idx].label = e.target.value;
+                               setReportTemplateFields(newFields);
+                             }}
+                             placeholder="Tên trường (VD: Sĩ số, Ghi chú)"
+                             className="flex-1 p-2 border border-slate-300 rounded text-sm outline-none focus:border-indigo-400"
+                           />
+                           <select 
+                             value={field.type}
+                             onChange={e => {
+                               const newFields = [...reportTemplateFields];
+                               newFields[idx].type = e.target.value as 'text' | 'number' | 'file';
+                               setReportTemplateFields(newFields);
+                             }}
+                             className="p-2 border border-slate-300 rounded text-sm outline-none"
+                           >
+                             <option value="text">Chữ (Text)</option>
+                             <option value="number">Số (Number)</option>
+                             <option value="file">File/Ảnh</option>
+                           </select>
+                           <label className="flex items-center gap-1 text-xs text-slate-600">
+                             <input 
+                               type="checkbox" 
+                               checked={field.required}
+                               onChange={e => {
+                                 const newFields = [...reportTemplateFields];
+                                 newFields[idx].required = e.target.checked;
+                                 setReportTemplateFields(newFields);
+                               }}
+                             /> Bắt buộc
+                           </label>
+                           <button type="button" onClick={() => {
+                             setReportTemplateFields(prev => prev.filter((_, i) => i !== idx));
+                           }} className="p-2 text-slate-400 hover:text-rose-500">
+                             <Trash2 className="w-4 h-4" />
+                           </button>
+                         </div>
+                       ))}
+                       <button
+                         type="button"
+                         onClick={() => setReportTemplateFields(prev => [...prev, { id: `field-${Date.now()}`, label: '', type: 'text', required: false }])}
+                         className="flex items-center gap-2 text-indigo-600 text-xs font-bold mt-2 font-medium hover:underline"
+                       >
+                         <Plus className="w-4 h-4"/> Thêm cột
+                       </button>
+                     </div>
+                   )}
+                 </div>
               </div>
+              </>
             )}
             
              {category === 'task' && (
