@@ -23,8 +23,11 @@ export interface PollOption {
   votes: string[]; // User IDs
 }
 
+export type UserTaskStatus = 'acknowledged' | 'doing' | 'done';
+
 export interface Submission {
   userId: string;
+  status?: UserTaskStatus;
   fileUrl?: string;
   content?: string;
   data?: Record<string, string | number>;
