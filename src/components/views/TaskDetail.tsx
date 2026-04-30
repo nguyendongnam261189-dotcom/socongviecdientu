@@ -12,15 +12,16 @@ interface TaskDetailProps {
 }
 
 const FilePreview: React.FC<{ title: string, url: string }> = ({ title, url }) => {
-  const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(title);
-  const isPdf = /\.(pdf)$/i.test(title);
+  const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(title) || url.startsWith('data:image/');
+  const isPdf = /\.(pdf)$/i.test(title) || url.startsWith('data:application/pdf');
   
   const driveMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
   const fileId = driveMatch ? driveMatch[1] : null;
 
   const [isOpen, setIsOpen] = useState(false);
 
-  if (!fileId || (!isImage && !isPdf)) {
+  // If it's a base64 image or pdf, we can just show it directly
+  if (!fileId && !isImage && !isPdf) {
     return (
       <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:bg-indigo-50 hover:border-indigo-200 transition-colors cursor-pointer text-sm shadow-sm group bg-white">
         <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
@@ -45,7 +46,7 @@ const FilePreview: React.FC<{ title: string, url: string }> = ({ title, url }) =
         <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">
           {isOpen ? 'Thu gọn' : 'Xem trực tiếp'}
         </span>
-        <a href={url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100">
+        <a href={url} download={title} onClick={e => e.stopPropagation()} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100">
            <Download className="w-4 h-4" />
         </a>
       </div>
@@ -54,13 +55,13 @@ const FilePreview: React.FC<{ title: string, url: string }> = ({ title, url }) =
         <div className="border-t border-slate-100 bg-slate-50 p-2 flex justify-center">
           {isImage ? (
             <img 
-              src={`https://drive.google.com/thumbnail?id=${fileId}&sz=w1200`} 
+              src={fileId ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w1200` : url} 
               alt={title} 
               className="max-w-full max-h-[70vh] object-contain rounded-lg border border-slate-200 shadow-sm"
             />
           ) : (
             <iframe 
-              src={`https://drive.google.com/file/d/${fileId}/preview`} 
+              src={fileId ? `https://drive.google.com/file/d/${fileId}/preview` : url} 
               className="w-full h-[60vh] rounded-lg border border-slate-200 shadow-sm"
               allow="autoplay"
             />
@@ -103,7 +104,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
   const author = users.find(u => u.id === task.createdBy);
   const canModify = canDeleteTask(task, currentUser, users) || canEditTask(task, currentUser, users);
   const canComment = task.assignedTo?.includes(currentUser?.id || '') || false;
-  const isReport = !!task.reportTemplate || !!task.submissionLink;
+  const isReport = !!task.reportTemplate;
   const myReport = task.submissions?.find(r => r.userId === currentUser?.id);
 
   const handleSend = () => {
@@ -240,7 +241,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
                     return (
                     <td key={f.id} className={cn("px-4 py-3", hasPrefill ? "bg-emerald-50/30 font-medium text-emerald-800" : "text-slate-600")}>
                       {f.type === 'file' ? (
-                         val ? <a href={String(val)} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">Xem tệp</a> : '-'
+                         val ? <div className="w-48"><FilePreview title={f.label} url={String(val)} /></div> : '-'
                       ) : (
                          val || '-'
                       )}
@@ -363,9 +364,9 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
                   </div>
                 )}
                 {myReport.fileUrl && (
-                  <a href={myReport.fileUrl} target="_blank" rel="noreferrer" className="text-sm font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 mt-2 bg-indigo-50 px-3 py-2 rounded-xl border border-indigo-100 transition-colors w-fit">
-                    <FileText className="w-4 h-4" /> Xem tệp / link đính kèm
-                  </a>
+                  <div className="mt-2">
+                    <FilePreview title="Tệp / Link đính kèm" url={myReport.fileUrl} />
+                  </div>
                 )}
                 {task.reportTemplate && task.reportTemplate.length > 0 && myReport.data && (
                   <div className="bg-white rounded-xl p-3 text-sm text-slate-700 shadow-sm border border-emerald-50 mt-2 space-y-2">
@@ -373,7 +374,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
                       <div key={f.id} className="flex flex-col">
                         <span className="text-[10px] uppercase font-bold text-slate-400">{f.label}</span>
                         {f.type === 'file' ? (
-                          myReport.data![f.id] ? <a href={String(myReport.data![f.id])} target="_blank" className="text-indigo-600 font-medium">Link tệp</a> : '-'
+                          myReport.data![f.id] ? <div className="mt-1"><FilePreview title={f.label} url={String(myReport.data![f.id])} /></div> : '-'
                         ) : (
                           <span className="font-medium">{myReport.data![f.id] || '-'}</span>
                         )}
