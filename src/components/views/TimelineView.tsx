@@ -23,7 +23,7 @@ export const TimelineView: React.FC = () => {
   });
 
   const displayTasks = relevantTasks.filter(t => {
-    const isReport = !!((t as any).reportTemplate || (t as any).submissionLink);
+    const isReport = !!(t as any).reportTemplate;
     const isDone = t.status === 'done' || (isReport && !!t.submissions?.find(r => r.userId === currentUser?.id));
     return showCompleted || !isDone;
   });
@@ -157,7 +157,7 @@ interface TimelineCardProps {
 
 const TimelineCard: React.FC<TimelineCardProps> = ({ task, onClick, isOverdue = false, isToday = false }) => {
   const { currentUser } = useAppContext();
-  const isReport = !!((task as any).reportTemplate || (task as any).submissionLink);
+  const isReport = !!(task as any).reportTemplate;
   const hasSubmittedReport = task.submissions?.some(r => r.userId === currentUser?.id);
   const isDone = task.status === 'done' || (isReport && hasSubmittedReport);
 
