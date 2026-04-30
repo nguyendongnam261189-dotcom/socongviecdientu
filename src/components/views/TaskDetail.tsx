@@ -39,7 +39,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
   const author = users.find(u => u.id === task.createdBy);
   const canModify = canDeleteTask(task, currentUser, users) || canEditTask(task, currentUser, users);
   const canComment = task.assignedTo?.includes(currentUser?.id || '') || false;
-  const isReport = !!task.reportTemplate;
+  const isReport = !!task.reportTemplate || !!task.submissionLink;
   const myReport = task.submissions?.find(r => r.userId === currentUser?.id);
 
   const handleSend = () => {
@@ -224,6 +224,18 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
           <div className="mt-4 text-slate-700 whitespace-pre-wrap leading-relaxed text-[13px] bg-slate-50 p-4 rounded-xl border border-slate-100 shadow-inner">
             {task.description}
           </div>
+
+          {task.submissionLink && (
+            <div className="mt-4 bg-indigo-50 border border-indigo-100 p-4 rounded-xl">
+              <h4 className="text-xs font-bold text-indigo-800 uppercase tracking-wider mb-2">Link Nộp / Khảo Sát Ngoài</h4>
+              <a href={task.submissionLink} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 font-medium underline break-all text-sm">
+                {task.submissionLink}
+              </a>
+              <p className="text-xs text-indigo-700/80 mt-1">
+                Hãy click vào link trên để điền form hoặc upload file theo yêu cầu của người tạo, sau đó quay lại đây bấm NỘP BÁO CÁO để xác nhận hoàn thành công việc.
+              </p>
+            </div>
+          )}
 
           {task.attachments && task.attachments.length > 0 && (
             <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
