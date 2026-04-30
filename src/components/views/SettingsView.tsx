@@ -118,13 +118,23 @@ export const SettingsView: React.FC = () => {
   const handleAddDept = async (newName: string) => {
     const newVal = [...departments, newName];
     setDepartments(newVal);
-    await setDoc(doc(db, "settings", "system"), { departments: newVal }, { merge: true });
+    try {
+      await setDoc(doc(db, "settings", "system"), { departments: newVal }, { merge: true });
+    } catch (e) {
+      console.error(e);
+      alert("Lỗi thêm DB: " + (e as Error).message);
+    }
   };
 
   const handleUpdateDept = async (oldName: string, newName: string) => {
     const newVal = departments.map(d => d === oldName ? newName : d);
     setDepartments(newVal);
-    await setDoc(doc(db, "settings", "system"), { departments: newVal }, { merge: true });
+    try {
+      await setDoc(doc(db, "settings", "system"), { departments: newVal }, { merge: true });
+    } catch (e) {
+      console.error(e);
+      alert("Lỗi lưu DB: " + (e as Error).message);
+    }
     
     users.filter(u => u.department === oldName).forEach(u => {
       updateUser(u.id, { department: newName });
