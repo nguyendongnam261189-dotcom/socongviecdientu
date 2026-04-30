@@ -2,41 +2,57 @@ import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { ChevronLeft, Plus, Trash2, ChevronDown, ChevronRight, FileSpreadsheet, Upload, Search } from 'lucide-react';
 import { cn } from '../../utils';
-import { TaskCategory, Role } from '../../types';
+import { TaskCategory, Role, Task } from '../../types';
 
 interface TaskFormProps {
   onBack: () => void;
+  initialTask?: Task;
 }
 
-export const TaskForm: React.FC<TaskFormProps> = ({ onBack }) => {
-  const { users, currentUser, addTask, showToast, departments: contextDepartments, grades: contextGrades, documentCategories, gasUrl } = useAppContext();
+export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
+  const { users, currentUser, addTask, editTask, showToast, departments: contextDepartments, grades: contextGrades, documentCategories, gasUrl } = useAppContext();
   
-  const [category, setCategory] = useState<TaskCategory>('task');
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState<TaskCategory>(initialTask?.category || 'task');
+  const [title, setTitle] = useState(initialTask?.title || '');
+  const [description, setDescription] = useState(initialTask?.description || '');
   
-  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
+  const [notifyAgain, setNotifyAgain] = useState(false);
+
+  const [visibility, setVisibility] = useState<'public' | 'private'>(initialTask?.visibility || 'public');
 
   // Targeting
-  const [targetType, setTargetType] = useState<'all' | 'specific' | 'individual'>('all');
-  const [selectedRoles, setSelectedRoles] = useState<Role[]>([]);
-  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
-  const [selectedGrades, setSelectedGrades] = useState<string[]>([]);
-  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [targetType, setTargetType] = useState<'all' | 'specific' | 'individual'>(() => {
+    if (initialTask) {
+       if (initialTask.assignedTo.length > 0 && initialTask.assignedTo.length < users.length) {
+         if (initialTask.targetRoles?.length || initialTask.targetDepartments?.length || initialTask.targetGrades?.length) {
+            return 'specific';
+         }
+         if (initialTask.assignedTo.length > 0) return 'individual';
+       }
+       if (initialTask.assignedTo.length === 0) return 'specific'; // no users selected but not "all" exactly
+       return 'all';
+    }
+    return 'all';
+  });
+  
+  const [selectedRoles, setSelectedRoles] = useState<Role[]>((initialTask?.targetRoles as Role[]) || []);
+  const [selectedDepartments, setSelectedDepartments] = useState<string[]>(initialTask?.targetDepartments || []);
+  const [selectedGrades, setSelectedGrades] = useState<string[]>(initialTask?.targetGrades || []);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>(initialTask?.assignedTo || []);
   const [userSearchQuery, setUserSearchQuery] = useState('');
   
-  const [deadline, setDeadline] = useState(new Date(Date.now() + 86400000).toISOString().slice(0, 16)); // Default 1 day later
-  const [hasDeadline, setHasDeadline] = useState(true);
+  const [deadline, setDeadline] = useState(initialTask?.deadline ? new Date(initialTask.deadline).toISOString().slice(0, 16) : new Date(Date.now() + 86400000).toISOString().slice(0, 16));
+  const [hasDeadline, setHasDeadline] = useState(!!initialTask?.deadline || !initialTask);
   
-  const [reportTemplateEnabled, setReportTemplateEnabled] = useState(false);
-  const [reportTemplateFields, setReportTemplateFields] = useState<{id: string, label: string, type: 'text' | 'number' | 'file', required: boolean}[]>([
+  const [reportTemplateEnabled, setReportTemplateEnabled] = useState(!!initialTask?.reportTemplate);
+  const [reportTemplateFields, setReportTemplateFields] = useState<{id: string, label: string, type: 'text' | 'number' | 'file', required: boolean}[]>(initialTask?.reportTemplate || [
       { id: 'field-1', label: 'Nhập số liệu', type: 'number', required: false }
   ]);
   
-  const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
-  const [pollMultipleChoice, setPollMultipleChoice] = useState(false);
+  const [pollOptions, setPollOptions] = useState<string[]>(initialTask?.pollOptions?.map(o => o.text) || ['', '']);
+  const [pollMultipleChoice, setPollMultipleChoice] = useState(initialTask?.pollMultipleChoice || false);
   
-  const [attachments, setAttachments] = useState<{ title: string; url: string; category?: string }[]>([]);
+  const [attachments, setAttachments] = useState<{ title: string; url: string; category?: string }[]>(initialTask?.attachments || []);
   const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
   const [isUploading, setIsUploading] = useState(false);
 
@@ -206,8 +222,14 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack }) => {
       newTaskParams.pollMultipleChoice = pollMultipleChoice;
     }
 
-    addTask(newTaskParams);
-    showToast('Tạo thành công!');
+    if (initialTask) {
+      editTask(initialTask.id, newTaskParams, notifyAgain);
+      showToast('Cập nhật thành công!');
+    } else {
+      addTask(newTaskParams);
+      showToast('Tạo thành công!');
+    }
+    
     onBack();
   };
 
@@ -227,13 +249,27 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack }) => {
         <button onClick={onBack} className="p-2 -ml-2 text-slate-500 hover:text-slate-800 transition-colors">
           <ChevronLeft className="w-5 h-5" />
         </button>
-        <h2 className="font-bold text-slate-800 text-lg">Tạo mới</h2>
+        <h2 className="font-bold text-slate-800 text-lg">{initialTask ? 'Chỉnh sửa' : 'Tạo mới'}</h2>
         <div className="w-9" />
       </div>
 
       <div className="flex-1 overflow-y-auto">
         <form id="create-task-form" onSubmit={handleSubmit} className="p-4 space-y-6 max-w-2xl mx-auto">
           
+          {initialTask && (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+              <label className="flex items-center gap-2 text-sm font-semibold text-amber-900 cursor-pointer">
+                <input 
+                  type="checkbox"
+                  checked={notifyAgain}
+                  onChange={e => setNotifyAgain(e.target.checked)}
+                  className="w-5 h-5 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+                />
+                Thông báo lại cho người nhận (đánh dấu chưa đọc)
+              </label>
+            </div>
+          )}
+
           {/* Category */}
           <div className="space-y-3">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Loại</label>
@@ -602,16 +638,9 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack }) => {
               ))}
 
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={handleAddAttachment}
-                  className="flex-1 flex items-center justify-center gap-2 p-2.5 rounded-lg border border-dashed border-slate-300 text-sm font-bold text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 transition-colors"
-                >
-                  <Plus className="w-4 h-4" /> Dán Link (Drive, Web,...)
-                </button>
-                <label className={`flex-1 flex items-center justify-center gap-2 p-2.5 rounded-lg border border-dashed border-slate-300 text-sm font-bold transition-colors ${isUploading ? 'text-slate-400 cursor-not-allowed bg-slate-50' : 'text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 cursor-pointer'}`}>
-                  <Upload className="w-4 h-4" /> {isUploading ? 'Đang tải...' : 'Tải tệp lên (Firebase)'}
-                  <input type="file" className="hidden" onChange={handleFileUpload} accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,text/plain" disabled={isUploading} />
+                <label className={`w-full flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed border-slate-300 text-sm font-bold transition-colors ${isUploading ? 'text-slate-400 cursor-not-allowed bg-slate-50' : 'text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 cursor-pointer'}`}>
+                  <Upload className="w-4 h-4" /> {isUploading ? 'Đang tải...' : 'Tải tài liệu lên'}
+                  <input type="file" className="hidden" multiple onChange={handleFileUpload} disabled={isUploading} />
                 </label>
               </div>
           </div>
@@ -623,7 +652,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack }) => {
               form="create-task-form"
               className={`w-full text-white font-bold py-4 rounded-xl shadow-lg transition-all ${isUploading ? 'bg-slate-400 cursor-not-allowed' : 'bg-slate-800 hover:bg-slate-700 hover:translate-y-[-1px] active:translate-y-[1px]'}`}
             >
-              Tạo Nội Dung Mới
+              {initialTask ? 'Lưu Thay Đổi' : 'Tạo Nội Dung Mới'}
             </button>
           </div>
           
