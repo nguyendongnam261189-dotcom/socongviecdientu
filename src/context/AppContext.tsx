@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { User, Task, Comment, Document, TabType } from "../types";
+import { User, Task, Comment, Document, TabType, UserTaskStatus } from "../types";
 import { auth, db } from "../firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
@@ -61,6 +61,7 @@ interface AppContextType {
     content: string,
     url?: string,
     data?: Record<string, string | number>,
+    status?: import("../types").UserTaskStatus
   ) => void;
   addComment: (
     taskId: string,
@@ -582,6 +583,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     content: string,
     url?: string,
     data?: Record<string, string | number>,
+    status?: UserTaskStatus
   ) => {
     if (!currentUser) return;
     try {
@@ -597,9 +599,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
         if (existingIndex >= 0) {
           newSubmissions[existingIndex] = {
             ...newSubmissions[existingIndex],
-            content: content,
-            fileUrl: url || "",
-            data: data,
+            content: content || newSubmissions[existingIndex].content,
+            fileUrl: url !== undefined ? url : newSubmissions[existingIndex].fileUrl,
+            data: data || newSubmissions[existingIndex].data,
+            status: status || newSubmissions[existingIndex].status || 'done',
             submittedAt: new Date().toISOString(),
           };
         } else {
@@ -608,6 +611,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
             fileUrl: url || "",
             content: content,
             data: data,
+            status: status || 'done',
             submittedAt: new Date().toISOString(),
           });
         }
