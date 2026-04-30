@@ -44,7 +44,7 @@ export const TasksView: React.FC = () => {
   const completed: Task[] = [];
 
   displayTasks.forEach(t => {
-    const isReport = !!(t.reportTemplate || t.submissionLink);
+    const isReport = !!t.reportTemplate;
     const isDone = t.status === 'done' || (isReport && !!t.submissions?.find(r => r.userId === currentUser?.id));
     
     if (isDone) {
@@ -132,7 +132,7 @@ export const TasksView: React.FC = () => {
 const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick }) => {
   const { updateTaskStatus, comments, showToast, currentUser } = useAppContext();
   
-  const isReport = !!(task.reportTemplate || task.submissionLink);
+  const isReport = !!task.reportTemplate;
   const hasSubmittedReport = isReport && !!task.submissions?.find(r => r.userId === currentUser?.id);
   const isDone = task.status === 'done' || hasSubmittedReport;
   const isOverdue = !isDone && task.deadline && isPast(parseISO(task.deadline));
