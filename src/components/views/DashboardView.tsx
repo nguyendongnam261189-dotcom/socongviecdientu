@@ -10,6 +10,7 @@ export const DashboardView: React.FC = () => {
   const { tasks: allTasks, users, currentUser, setActiveTab, showToast, toggleTaskUrgent } = useAppContext();
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [listFilter, setListFilter] = useState<'pending' | 'done'>('pending');
 
   const tasks = allTasks.filter(t => isTaskVisible(t, currentUser, users) && t.category === 'task');
 
@@ -57,6 +58,17 @@ export const DashboardView: React.FC = () => {
     }
     return { ...t, pendingUids };
   }).filter(t => t.pendingUids.length > 0);
+
+  // Completed tasks and users who have submitted
+  const completedTasks = tasks.map(t => {
+    let doneUids: string[] = [];
+    if (t.reportTemplate) {
+       doneUids = (t.assignedTo || []).filter(uid => t.submissions?.some(s => s.userId === uid));
+    } else if (t.status === 'done') {
+       doneUids = t.assignedTo || [];
+    }
+    return { ...t, doneUids, isFullyDone: t.status === 'done' || (t.reportTemplate && doneUids.length === (t.assignedTo?.length || 0)) };
+  }).filter(t => t.doneUids.length > 0 || t.status === 'done');
 
   const handleRemind = (e: React.MouseEvent, uid: string) => {
     e.stopPropagation();
@@ -153,12 +165,29 @@ export const DashboardView: React.FC = () => {
         </div>
       </div>
       
-      {/* Chưa nộp / Chưa hoàn thành */}
-      {pendingTasks.length > 0 && (
-        <div>
-          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 ml-1 flex items-center gap-1.5">
-            <UsersIcon className="w-4 h-4" /> Chưa nộp / Chưa hoàn thành
+      {/* Task Lists with Tabs */}
+      <div className="mt-4">
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1 flex items-center gap-1.5">
+            <FileText className="w-4 h-4" /> Danh sách công việc
           </h3>
+          <div className="flex bg-slate-200 p-1 rounded-lg">
+            <button
+              onClick={() => setListFilter('pending')}
+              className={cn("px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all", listFilter === 'pending' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+            >
+              Cần đôn đốc
+            </button>
+            <button
+              onClick={() => setListFilter('done')}
+              className={cn("px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all", listFilter === 'done' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+            >
+              Đã hoàn thành
+            </button>
+          </div>
+        </div>
+
+        {listFilter === 'pending' && pendingTasks.length > 0 && (
           <div className="space-y-3">
             {pendingTasks.map(task => {
               const overdue = task.deadline && isPast(parseISO(task.deadline));
@@ -223,8 +252,57 @@ export const DashboardView: React.FC = () => {
               );
             })}
           </div>
-        </div>
-      )}
+        )}
+
+        {listFilter === 'pending' && pendingTasks.length === 0 && (
+          <div className="text-center p-8 bg-white rounded-2xl border border-slate-200 border-dashed">
+            <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2 opacity-50" />
+            <p className="text-slate-500 text-sm font-medium">Tuyệt vời! Không có ai bị trễ hoặc ngâm việc.</p>
+          </div>
+        )}
+
+        {listFilter === 'done' && completedTasks.length > 0 && (
+          <div className="space-y-3">
+            {completedTasks.map(task => (
+                <div 
+                  key={task.id} 
+                  onClick={() => setSelectedTaskId(task.id)}
+                  className="bg-white p-3.5 rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-emerald-500 relative overflow-hidden cursor-pointer hover:shadow-md transition-all active:scale-[0.99]"
+                >
+                  <div className="flex justify-between items-start mb-2">
+                     <h4 className="font-bold text-sm text-slate-800 pr-2 line-clamp-2">{task.title}</h4>
+                     {task.isFullyDone && <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />}
+                  </div>
+                  
+                  <div className="space-y-1.5">
+                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Đã hoàn thành / nộp báo cáo:</p>
+                     <div className="flex flex-col gap-1.5">
+                        {task.doneUids.map(uid => {
+                           const user = users.find(u => u.id === uid);
+                           if (!user) return null;
+                           return (
+                              <div key={uid} className="flex justify-between items-center bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-100">
+                                 <div className="flex flex-col">
+                                    <span className="text-xs font-bold text-slate-700">{user.name}</span>
+                                    <span className="text-[9px] text-slate-500">{user.department}</span>
+                                 </div>
+                                 <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                              </div>
+                           )
+                        })}
+                     </div>
+                  </div>
+                </div>
+            ))}
+          </div>
+        )}
+
+        {listFilter === 'done' && completedTasks.length === 0 && (
+          <div className="text-center p-8 bg-white rounded-2xl border border-slate-200 border-dashed">
+             <p className="text-slate-500 text-sm font-medium">Chưa có công việc nào hoàn thành.</p>
+          </div>
+        )}
+      </div>
 
       {selectedTaskId && (
         <TaskDetail task={allTasks.find(t => t.id === selectedTaskId)!} onBack={() => setSelectedTaskId(null)} />
