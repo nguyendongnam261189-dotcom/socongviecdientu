@@ -48,6 +48,7 @@ interface AppContextType {
   updateUser: (id: string, updates: Partial<User>) => void;
   deleteUser: (id: string) => void;
   addTask: (task: Omit<Task, "id" | "createdAt">) => void;
+  editTask: (taskId: string, updates: Partial<Task>, notifyAgain: boolean) => void;
   updateTaskStatus: (taskId: string, status: Task["status"]) => void;
   deleteTask: (taskId: string) => void;
   markTaskRead: (taskId: string) => void;
@@ -144,10 +145,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
             // First time, create it
             if (currentUser?.role === 'admin') {
                setDoc(doc(db, "settings", "system"), {
-                 departments,
-                 grades,
-                 documentCategories,
-                 gasUrl: gasUrlState
+                 departments: [
+                    "Toán",
+                    "Văn",
+                    "Ngoại Ngữ",
+                    "Lý - Hóa - Sinh",
+                    "Sử - Địa - GDCD",
+                    "Thể dục - QP",
+                    "BGH",
+                    "Khác",
+                  ],
+                 grades: [
+                    "Khối 10",
+                    "Khối 11",
+                    "Khối 12",
+                    "Toàn trường",
+                  ],
+                 documentCategories: [
+                    "Công văn",
+                    "Ảnh hoạt động",
+                    "Thời khóa biểu",
+                    "Kế hoạch giảng dạy",
+                    "Khác",
+                  ],
+                 gasUrl: ""
                }, { merge: true });
             }
           }
@@ -392,6 +413,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
         console.error("Error adding task: ", err);
         alert("Lỗi khi thêm task: " + err.message);
       });
+  };
+
+  const editTask = (taskId: string, updates: Partial<Task>, notifyAgain: boolean) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id === taskId) {
+        if (notifyAgain) {
+          return { ...t, ...updates, readReceipts: [] };
+        }
+        return { ...t, ...updates };
+      }
+      return t;
+    }));
+    
+    const dbUpdates: any = { ...updates };
+    if (notifyAgain) {
+      dbUpdates.readReceipts = [];
+    }
+    
+    updateDoc(doc(db, "tasks", taskId), dbUpdates).catch(err => {
+      console.error("Error editing task", err);
+      alert("Lỗi khi cập nhật công việc: " + err.message);
+    });
   };
 
   const updateTaskStatus = (taskId: string, status: Task["status"]) => {
@@ -643,6 +686,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
         updateUser,
         deleteUser,
         addTask,
+        editTask,
         updateTaskStatus,
         deleteTask,
         markTaskRead,
