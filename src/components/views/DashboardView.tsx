@@ -17,11 +17,8 @@ export const DashboardView: React.FC = () => {
   const totalTasks = tasks.length;
   const doneTasks = tasks.filter(t => {
     if (t.status === 'done') return true;
-    if (t.reportTemplate) {
-      if (!t.assignedTo || t.assignedTo.length === 0) return true;
-      return t.assignedTo.every(uid => t.submissions?.some(s => s.userId === uid));
-    }
-    return false;
+    if (!t.assignedTo || t.assignedTo.length === 0) return false;
+    return t.assignedTo.every(uid => t.submissions?.some(s => s.userId === uid && (!s.status || s.status === 'done')));
   }).length;
   
   const completionRate = totalTasks === 0 ? 0 : Math.round((doneTasks / totalTasks) * 100);
@@ -36,12 +33,9 @@ export const DashboardView: React.FC = () => {
     const deptTasks = tasks.filter(t => t.assignedTo?.some(uid => deptUsers.includes(uid)));
     const deptDone = deptTasks.filter(t => {
       if (t.status === 'done') return true;
-      if (t.reportTemplate) {
-         const assignedInDept = t.assignedTo.filter(uid => deptUsers.includes(uid));
-         if (assignedInDept.length === 0) return true;
-         return assignedInDept.every(uid => t.submissions?.some(s => s.userId === uid));
-      }
-      return false;
+      const assignedInDept = t.assignedTo?.filter(uid => deptUsers.includes(uid)) || [];
+      if (assignedInDept.length === 0) return true;
+      return assignedInDept.every(uid => t.submissions?.some(s => s.userId === uid && (!s.status || s.status === 'done')));
     }).length;
     const deptOverdue = deptTasks.filter(t => t.deadline && t.status !== 'done' && isPast(parseISO(t.deadline))).length;
     const rate = deptTasks.length === 0 ? 0 : Math.round((deptDone / deptTasks.length) * 100);
@@ -50,24 +44,14 @@ export const DashboardView: React.FC = () => {
 
   // Pending tasks and users who haven't submitted
   const pendingTasks = tasks.filter(t => t.status !== 'done').map(t => {
-    let pendingUids: string[] = [];
-    if (t.reportTemplate) {
-       pendingUids = (t.assignedTo || []).filter(uid => !t.submissions?.some(s => s.userId === uid));
-    } else {
-       pendingUids = t.assignedTo || [];
-    }
+    let pendingUids: string[] = (t.assignedTo || []).filter(uid => !t.submissions?.some(s => s.userId === uid && (!s.status || s.status === 'done')));
     return { ...t, pendingUids };
   }).filter(t => t.pendingUids.length > 0);
 
   // Completed tasks and users who have submitted
   const completedTasks = tasks.map(t => {
-    let doneUids: string[] = [];
-    if (t.reportTemplate) {
-       doneUids = (t.assignedTo || []).filter(uid => t.submissions?.some(s => s.userId === uid));
-    } else if (t.status === 'done') {
-       doneUids = t.assignedTo || [];
-    }
-    return { ...t, doneUids, isFullyDone: t.status === 'done' || (t.reportTemplate && doneUids.length === (t.assignedTo?.length || 0)) };
+    let doneUids: string[] = (t.assignedTo || []).filter(uid => t.submissions?.some(s => s.userId === uid && (!s.status || s.status === 'done')));
+    return { ...t, doneUids, isFullyDone: t.status === 'done' || (doneUids.length > 0 && doneUids.length === (t.assignedTo?.length || 0)) };
   }).filter(t => t.doneUids.length > 0 || t.status === 'done');
 
   const handleRemind = (e: React.MouseEvent, uid: string) => {
