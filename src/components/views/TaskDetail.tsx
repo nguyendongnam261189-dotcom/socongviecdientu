@@ -1,14 +1,75 @@
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { format, parseISO } from 'date-fns';
-import { ChevronLeft, Send, Paperclip, CheckCircle2, Circle, Clock, Trash2, FileText, Download, Lock, Unlock, MessageSquareReply } from 'lucide-react';
+import { ChevronLeft, Send, Paperclip, CheckCircle2, Circle, Clock, Trash2, FileText, Download, Lock, Unlock, MessageSquareReply, Edit2 } from 'lucide-react';
 import { Task } from '../../types';
 import { cn, canDeleteTask, canEditTask } from '../../utils';
+import * as XLSX from 'xlsx';
 
 interface TaskDetailProps {
   task: Task;
   onBack: () => void;
 }
+
+const FilePreview: React.FC<{ title: string, url: string }> = ({ title, url }) => {
+  const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(title);
+  const isPdf = /\.(pdf)$/i.test(title);
+  
+  const driveMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  const fileId = driveMatch ? driveMatch[1] : null;
+
+  const [isOpen, setIsOpen] = useState(false);
+
+  if (!fileId || (!isImage && !isPdf)) {
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:bg-indigo-50 hover:border-indigo-200 transition-colors cursor-pointer text-sm shadow-sm group bg-white">
+        <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+          <Paperclip className="w-4 h-4" />
+        </div>
+        <span className="font-bold text-slate-700 truncate flex-1">{title}</span>
+        <Download className="w-4 h-4 text-slate-400 group-hover:text-indigo-600" />
+      </a>
+    );
+  }
+
+  return (
+    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-3 p-3 hover:bg-slate-50 transition-colors cursor-pointer text-sm"
+      >
+        <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+          {isImage ? <FileText className="w-4 h-4" /> : <Paperclip className="w-4 h-4" />}
+        </div>
+        <span className="font-bold text-slate-700 truncate flex-1">{title}</span>
+        <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">
+          {isOpen ? 'Thu gọn' : 'Xem trực tiếp'}
+        </span>
+        <a href={url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100">
+           <Download className="w-4 h-4" />
+        </a>
+      </div>
+      
+      {isOpen && (
+        <div className="border-t border-slate-100 bg-slate-50 p-2 flex justify-center">
+          {isImage ? (
+            <img 
+              src={`https://drive.google.com/thumbnail?id=${fileId}&sz=w1200`} 
+              alt={title} 
+              className="max-w-full max-h-[70vh] object-contain rounded-lg border border-slate-200 shadow-sm"
+            />
+          ) : (
+            <iframe 
+              src={`https://drive.google.com/file/d/${fileId}/preview`} 
+              className="w-full h-[60vh] rounded-lg border border-slate-200 shadow-sm"
+              allow="autoplay"
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
   const { comments, users, currentUser, addComment, updateTaskStatus, deleteTask, submitReport, showToast, markTaskRead } = useAppContext();
@@ -22,12 +83,15 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
   const [replyToId, setReplyToId] = useState<string | null>(null);
   
   // Report state
-  const [reportContent, setReportContent] = useState(task.submissions?.find(r => r.userId === currentUser?.id)?.content || '');
-  const [reportUrl, setReportUrl] = useState(task.submissions?.find(r => r.userId === currentUser?.id)?.fileUrl || '');
+  const myExistingReport = task.submissions?.find(r => r.userId === currentUser?.id);
+  const [reportContent, setReportContent] = useState(myExistingReport?.content || '');
+  const [reportUrl, setReportUrl] = useState(myExistingReport?.fileUrl || '');
   const [reportData, setReportData] = useState<Record<string, string | number>>(() => {
+    if (myExistingReport?.data) return myExistingReport.data;
     if (!currentUser || !task.reportPrefill) return {};
     return task.reportPrefill[currentUser.id] || {};
   });
+  const [isEditingReport, setIsEditingReport] = useState(false);
 
   const getIsPrefilled = (fieldId: string) => {
     if (!currentUser || !task.reportPrefill || !task.reportPrefill[currentUser.id]) return false;
@@ -76,6 +140,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
     }
 
     submitReport(task.id, reportContent, reportUrl, reportData);
+    setIsEditingReport(false);
     showToast('Đã nộp báo cáo thành công');
   };
 
@@ -94,6 +159,42 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
        };
        reader.readAsDataURL(file);
      }
+  };
+
+  const exportToExcel = () => {
+    if (!task.reportTemplate || task.reportTemplate.length === 0) return;
+    
+    // Header
+    const headers = ['Giáo viên', 'Trạng thái', ...task.reportTemplate.map(f => f.label)];
+    const rows = [headers];
+    
+    // Data rows
+    task.assignedTo.forEach(uid => {
+      const u = users.find(user => user.id === uid);
+      const name = u?.name || uid;
+      const r = task.submissions?.find(rep => rep.userId === uid);
+      const status = r ? 'Đã nộp' : 'Chưa nộp';
+      
+      const rowData = [name, status];
+      task.reportTemplate!.forEach(f => {
+        const preVal = task.reportPrefill?.[uid]?.[f.id];
+        let val = r ? r.data?.[f.id] : preVal;
+        rowData.push(val !== undefined && val !== null ? String(val) : '');
+      });
+      rows.push(rowData);
+    });
+    
+    // create workbook
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "Báo cáo");
+    
+    // Write array buffer
+    XLSX.writeFile(wb, `Bao_cao_${task.title.replace(/ /g, '_')}.xlsx`);
+  };
+
+  const handleDocumentClick = (e: React.MouseEvent) => {
+    // Optional utility wrapper
   };
 
   // Render logic for admin report table
@@ -225,29 +326,11 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
             {task.description}
           </div>
 
-          {task.submissionLink && (
-            <div className="mt-4 bg-indigo-50 border border-indigo-100 p-4 rounded-xl">
-              <h4 className="text-xs font-bold text-indigo-800 uppercase tracking-wider mb-2">Link Nộp / Khảo Sát Ngoài</h4>
-              <a href={task.submissionLink} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 font-medium underline break-all text-sm">
-                {task.submissionLink}
-              </a>
-              <p className="text-xs text-indigo-700/80 mt-1">
-                Hãy click vào link trên để điền form hoặc upload file theo yêu cầu của người tạo, sau đó quay lại đây bấm NỘP BÁO CÁO để xác nhận hoàn thành công việc.
-              </p>
-            </div>
-          )}
-
           {task.attachments && task.attachments.length > 0 && (
             <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Tệp đính kèm ({task.attachments.length})</h4>
               {task.attachments.map((att, idx) => (
-                <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:bg-indigo-50 hover:border-indigo-200 transition-colors cursor-pointer text-sm shadow-sm group">
-                  <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                    <Paperclip className="w-4 h-4" />
-                  </div>
-                  <span className="font-bold text-slate-700 truncate flex-1">{att.title}</span>
-                  <Download className="w-4 h-4 text-slate-400 group-hover:text-indigo-600" />
-                </a>
+                <FilePreview key={idx} title={att.title} url={att.url} />
               ))}
             </div>
           )}
@@ -259,12 +342,20 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
             <div className="flex justify-between items-center mb-4">
               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Nộp báo cáo</h4>
             </div>
-            {myReport ? (
+            {myReport && !isEditingReport ? (
               <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 shadow-sm relative overflow-hidden">
                 <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-400"></div>
-                <div className="flex gap-2 items-center mb-3 text-emerald-700 font-bold text-sm">
-                  <CheckCircle2 className="w-5 h-5" />
-                  Bạn đã nộp báo cáo
+                <div className="flex justify-between items-start">
+                  <div className="flex gap-2 items-center mb-3 text-emerald-700 font-bold text-sm">
+                    <CheckCircle2 className="w-5 h-5" />
+                    Bạn đã nộp báo cáo
+                  </div>
+                  <button 
+                    onClick={() => setIsEditingReport(true)}
+                    className="flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-lg hover:bg-emerald-200 transition-colors"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" /> Chỉnh sửa
+                  </button>
                 </div>
                 {myReport.content && (
                   <div className="bg-white rounded-xl p-3 text-sm text-slate-700 shadow-sm border border-emerald-50 mb-2">
@@ -362,8 +453,17 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
                 )}
                 <div className="flex gap-2 mt-2">
                   <button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2">
-                    <Send className="w-4 h-4" /> NỘP BÁO CÁO
+                    <Send className="w-4 h-4" /> {isEditingReport ? 'CẬP NHẬT BÁO CÁO' : 'NỘP BÁO CÁO'}
                   </button>
+                  {isEditingReport && myReport && (
+                    <button 
+                      type="button" 
+                      onClick={() => setIsEditingReport(false)}
+                      className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-4 py-3 text-sm rounded-xl transition-all"
+                    >
+                      Hủy
+                    </button>
+                  )}
                 </div>
               </form>
             )}
@@ -373,7 +473,17 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
         {/* Report Monitoring (For Creator/Admin) */}
         {isReport && canModify && (
           <div className="p-4 bg-white border-b border-slate-200">
-            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Danh sách nộp ({task.submissions?.length || 0}/{task.assignedTo.length})</h4>
+            <div className="flex justify-between items-center mb-4">
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Danh sách nộp ({task.submissions?.length || 0}/{task.assignedTo.length})</h4>
+              {task.reportTemplate && task.reportTemplate.length > 0 && (
+                <button 
+                  onClick={exportToExcel}
+                  className="flex items-center gap-1 text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" /> Xuất Excel
+                </button>
+              )}
+            </div>
             
             {task.reportTemplate && task.reportTemplate.length > 0 ? (
               renderAdminReportTable()
