@@ -10,6 +10,7 @@ export const TasksView: React.FC = () => {
   const { tasks, currentUser } = useAppContext();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [listFilter, setListFilter] = useState<'pending' | 'done'>('pending');
 
   // 4. Show only relevant tasks
   const relevantTasks = tasks.filter(t => {
@@ -22,7 +23,17 @@ export const TasksView: React.FC = () => {
     return !!(isCreator || isAssigned || isRole || isDept || isGrade);
   });
   
-  let displayTasks = relevantTasks;
+  let displayTasks = relevantTasks.filter(t => {
+    const isReport = !!t.reportTemplate;
+    const hasSubmittedReport = isReport && !!t.submissions?.find(r => r.userId === currentUser?.id);
+    const isDone = t.status === 'done' || hasSubmittedReport;
+    
+    if (listFilter === 'pending' && isDone) return false;
+    if (listFilter === 'done' && !isDone) return false;
+    
+    return true;
+  });
+
   if (searchQuery.trim()) {
     const q = searchQuery.toLowerCase();
     displayTasks = displayTasks.filter(t => t.title.toLowerCase().includes(q) || t.description.toLowerCase().includes(q));
@@ -64,10 +75,28 @@ export const TasksView: React.FC = () => {
     <>
       <div className="flex flex-col h-full bg-slate-50">
         <div className="bg-white p-4 shadow-sm z-10 sticky top-0 border-b border-slate-200">
-          <h2 className="font-bold text-lg text-slate-800 flex items-center justify-between">
-            Nhiệm vụ của tôi
-          </h2>
-          <div className="relative mt-3">
+          <div className="flex justify-between items-center mb-1">
+            <h2 className="font-bold text-lg text-slate-800 flex items-center justify-between">
+              Nhiệm vụ của tôi
+            </h2>
+          </div>
+          
+          <div className="flex bg-slate-100 p-1 rounded-xl mb-3 w-full max-w-[300px]">
+            <button
+              onClick={() => setListFilter('pending')}
+              className={cn("flex-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all", listFilter === 'pending' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+            >
+              Cần thực hiện
+            </button>
+            <button
+              onClick={() => setListFilter('done')}
+              className={cn("flex-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all", listFilter === 'done' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+            >
+              Đã hoàn thành
+            </button>
+          </div>
+
+          <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
               type="text"
