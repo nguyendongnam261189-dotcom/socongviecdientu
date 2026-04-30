@@ -599,9 +599,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
         if (existingIndex >= 0) {
           newSubmissions[existingIndex] = {
             ...newSubmissions[existingIndex],
-            content: content || newSubmissions[existingIndex].content,
-            fileUrl: url !== undefined ? url : newSubmissions[existingIndex].fileUrl,
-            data: data || newSubmissions[existingIndex].data,
+            content: content !== undefined ? content : (newSubmissions[existingIndex].content || ""),
+            fileUrl: url !== undefined ? url : (newSubmissions[existingIndex].fileUrl || ""),
+            data: data !== undefined ? data : (newSubmissions[existingIndex].data || null),
             status: status || newSubmissions[existingIndex].status || 'done',
             submittedAt: new Date().toISOString(),
           };
@@ -609,8 +609,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
           newSubmissions.push({
             userId: currentUser.id,
             fileUrl: url || "",
-            content: content,
-            data: data,
+            content: content || "",
+            data: data || null,
             status: status || 'done',
             submittedAt: new Date().toISOString(),
           });
