@@ -418,8 +418,11 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Trạng thái của bạn</h4>
               <div className="flex gap-2">
                 <button 
-                  onClick={() => submitReport(task.id, myReport?.content || '', myReport?.fileUrl, myReport?.data, 'doing')}
-                  className={cn("px-3 py-1.5 rounded-lg border text-[11px] sm:text-xs font-bold transition-all", 
+                  onClick={() => {
+                    submitReport(task.id, myReport?.content || '', myReport?.fileUrl, myReport?.data, 'doing');
+                    showToast('Đã cập nhật trạng thái: Đã nắm thông tin/Đang làm');
+                  }}
+                  className={cn("px-3 py-1.5 rounded-lg border text-[11px] sm:text-xs font-bold transition-all transform active:scale-95", 
                     myReport?.status === 'doing' || myReport?.status === 'acknowledged' ? "bg-amber-50 text-amber-700 border-amber-200 shadow-sm" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
                   )}
                 >
@@ -427,8 +430,11 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
                 </button>
                 {!isReport && (
                   <button 
-                    onClick={() => submitReport(task.id, myReport?.content || '', myReport?.fileUrl, myReport?.data, 'done')}
-                    className={cn("px-3 py-1.5 rounded-lg border text-[11px] sm:text-xs font-bold transition-all", 
+                    onClick={() => {
+                      submitReport(task.id, myReport?.content || '', myReport?.fileUrl, myReport?.data, 'done');
+                      showToast('Đã cập nhật trạng thái: Đã hoàn thành');
+                    }}
+                    className={cn("px-3 py-1.5 rounded-lg border text-[11px] sm:text-xs font-bold transition-all transform active:scale-95", 
                       myReport?.status === 'done' ? "bg-emerald-50 text-emerald-700 border-emerald-200 shadow-sm" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
                     )}
                   >
