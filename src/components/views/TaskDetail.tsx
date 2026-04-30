@@ -73,7 +73,9 @@ const FilePreview: React.FC<{ title: string, url: string }> = ({ title, url }) =
 };
 
 export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
-  const { comments, users, currentUser, addComment, updateTaskStatus, deleteTask, submitReport, showToast, markTaskRead } = useAppContext();
+  const { comments, users, currentUser, addComment, updateTaskStatus, deleteTask, submitReport, showToast, markTaskRead, gasUrl } = useAppContext();
+  const [isUploadingFiles, setIsUploadingFiles] = useState(false);
+  const [uploadProgressState, setUploadProgressState] = useState('');
   
   useEffect(() => {
     markTaskRead(task.id);
@@ -149,14 +151,69 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
     setReportData(prev => ({ ...prev, [id]: val }));
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, fieldId: string) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, fieldId: string | null) => {
      const file = e.target.files?.[0];
-     if (file) {
+     if (!file) return;
+
+     if (gasUrl) {
+       setIsUploadingFiles(true);
+       setUploadProgressState('Đang đọc file...');
+       try {
+         const reader = new FileReader();
+         reader.onload = async (event) => {
+           const base64Data = (event.target?.result as string).split(',')[1];
+           setUploadProgressState('Đang tải lên Drive...');
+           
+           try {
+             const folderPath = `QuanLyTruongHoc/${new Date().getFullYear()}/Thang_${new Date().getMonth() + 1}/BaoCao`;
+             
+             const response = await fetch(gasUrl, {
+               method: 'POST',
+               body: JSON.stringify({
+                 fileName: file.name,
+                 mimeType: file.type || 'application/octet-stream',
+                 fileData: base64Data,
+                 folderPath: folderPath
+               }),
+               headers: {
+                 'Content-Type': 'text/plain;charset=utf-8',
+               }
+             });
+
+             const result = await response.json();
+             if (result.url) {
+               if (fieldId) {
+                  handleReportDataChange(fieldId, result.url);
+               } else {
+                  setReportUrl(result.url);
+               }
+             } else {
+               throw new Error(result.error || 'Server không trả về URL');
+             }
+           } catch (err: any) {
+             console.error(err);
+             alert('Lỗi lưu Google Drive: ' + err.message);
+           } finally {
+             setIsUploadingFiles(false);
+             setUploadProgressState('');
+           }
+         };
+         reader.readAsDataURL(file);
+       } catch (err: any) {
+         alert('Lỗi: ' + err.message);
+         setIsUploadingFiles(false);
+         setUploadProgressState('');
+       }
+     } else {
+       // Fallback to base64 length string if gasUrl not there
        const reader = new FileReader();
        reader.onload = (event) => {
          const url = event.target?.result as string;
-         // Store URL directly in reportData
-         handleReportDataChange(fieldId, url);
+         if (fieldId) {
+            handleReportDataChange(fieldId, url);
+         } else {
+            setReportUrl(url);
+         }
        };
        reader.readAsDataURL(file);
      }
@@ -409,12 +466,22 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
                             disabled={isPrefilled}
                           />
                         ) : f.type === 'file' ? (
-                          <input 
-                            type="file"
-                            onChange={e => handleFileUpload(e, f.id)}
-                            className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-all font-medium"
-                            required={f.required && !reportData[f.id]}
-                          />
+                          <div className="space-y-2">
+                            <input 
+                              type="file"
+                              onChange={e => handleFileUpload(e, f.id)}
+                              className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-all font-medium disabled:opacity-50"
+                              required={f.required && !reportData[f.id]}
+                              disabled={isPrefilled || isUploadingFiles}
+                            />
+                            {isUploadingFiles && <span className="text-xs text-indigo-500 block">Đang tải lên... {uploadProgressState}</span>}
+                            {reportData[f.id] && !isUploadingFiles && (
+                               <div className="p-2 bg-emerald-50 rounded border border-emerald-100 flex items-center gap-2">
+                                 <span className="text-xs text-emerald-600 font-medium truncate flex-1">Đã tải tệp lên!</span>
+                                 {!isPrefilled && <button type="button" onClick={() => handleReportDataChange(f.id, '')} className="text-rose-500 hover:text-rose-700 text-xs font-bold">Xóa</button>}
+                               </div>
+                            )}
+                          </div>
                         ) : (
                           <input 
                             type="text"
@@ -442,18 +509,24 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
                 </div>
                 {!task.reportTemplate && (
                   <div>
-                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Link đính kèm (Drive, Docs, Sheet) <span className="font-normal normal-case text-slate-400">(Tùy chọn)</span></label>
+                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Tải tệp đính kèm (Hình ảnh, PDF, Word...) <span className="font-normal normal-case text-slate-400">(Tùy chọn)</span></label>
                     <input 
-                      type="url"
-                      value={reportUrl}
-                      onChange={e => setReportUrl(e.target.value)}
-                      placeholder="https://"
-                      className="w-full bg-white border border-slate-200 text-slate-800 text-sm rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all font-medium shadow-inner"
+                      type="file"
+                      disabled={isUploadingFiles}
+                      onChange={e => handleFileUpload(e, null)}
+                      className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-all font-medium disabled:opacity-50"
                     />
+                    {isUploadingFiles && <span className="text-xs text-indigo-500 mt-2 block">Đang tải lên... {uploadProgressState}</span>}
+                    {reportUrl && !isUploadingFiles && (
+                       <div className="mt-2 p-2 bg-emerald-50 rounded border border-emerald-100 flex items-center gap-2">
+                         <span className="text-xs text-emerald-600 font-medium truncate flex-1">Đã đính kèm tệp: {reportUrl}</span>
+                         <button type="button" onClick={() => setReportUrl('')} className="text-rose-500 hover:text-rose-700 text-xs font-bold">Xóa</button>
+                       </div>
+                    )}
                   </div>
                 )}
                 <div className="flex gap-2 mt-2">
-                  <button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2">
+                  <button type="submit" disabled={isUploadingFiles} className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold py-3 text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2">
                     <Send className="w-4 h-4" /> {isEditingReport ? 'CẬP NHẬT BÁO CÁO' : 'NỘP BÁO CÁO'}
                   </button>
                   {isEditingReport && myReport && (
