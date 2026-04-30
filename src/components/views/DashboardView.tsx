@@ -16,7 +16,7 @@ export const DashboardView: React.FC = () => {
   const totalTasks = tasks.length;
   const doneTasks = tasks.filter(t => {
     if (t.status === 'done') return true;
-    if (t.reportTemplate || t.submissionLink) {
+    if (t.reportTemplate) {
       if (!t.assignedTo || t.assignedTo.length === 0) return true;
       return t.assignedTo.every(uid => t.submissions?.some(s => s.userId === uid));
     }
@@ -35,7 +35,7 @@ export const DashboardView: React.FC = () => {
     const deptTasks = tasks.filter(t => t.assignedTo?.some(uid => deptUsers.includes(uid)));
     const deptDone = deptTasks.filter(t => {
       if (t.status === 'done') return true;
-      if (t.reportTemplate || t.submissionLink) {
+      if (t.reportTemplate) {
          const assignedInDept = t.assignedTo.filter(uid => deptUsers.includes(uid));
          if (assignedInDept.length === 0) return true;
          return assignedInDept.every(uid => t.submissions?.some(s => s.userId === uid));
@@ -50,7 +50,7 @@ export const DashboardView: React.FC = () => {
   // Pending tasks and users who haven't submitted
   const pendingTasks = tasks.filter(t => t.status !== 'done').map(t => {
     let pendingUids: string[] = [];
-    if (t.reportTemplate || t.submissionLink) {
+    if (t.reportTemplate) {
        pendingUids = (t.assignedTo || []).filter(uid => !t.submissions?.some(s => s.userId === uid));
     } else {
        pendingUids = t.assignedTo || [];
