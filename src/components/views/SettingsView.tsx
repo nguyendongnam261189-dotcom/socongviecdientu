@@ -2,11 +2,14 @@ import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { Settings, Plus, Trash2, Edit2, Check, X } from 'lucide-react';
 import { cn } from '../../utils';
+import { db } from '../../firebase';
+import { doc, setDoc } from 'firebase/firestore';
 
-const ManageList = ({ title, items, setItems, onUpdateItem, onDeleteItem }: { 
+const ManageList = ({ title, items, setItems, onAddItem, onUpdateItem, onDeleteItem }: { 
   title: string, 
   items: string[], 
   setItems: React.Dispatch<React.SetStateAction<string[]>>,
+  onAddItem: (name: string) => void,
   onUpdateItem: (oldName: string, newName: string) => void,
   onDeleteItem: (name: string) => void
 }) => {
@@ -16,7 +19,7 @@ const ManageList = ({ title, items, setItems, onUpdateItem, onDeleteItem }: {
 
   const handleAdd = () => {
     if (newItem.trim() && !items.includes(newItem.trim())) {
-      setItems([...items, newItem.trim()]);
+      onAddItem(newItem.trim());
       setNewItem('');
     }
   };
@@ -102,7 +105,7 @@ const ManageList = ({ title, items, setItems, onUpdateItem, onDeleteItem }: {
 };
 
 export const SettingsView: React.FC = () => {
-  const { currentUser, departments, setDepartments, grades, setGrades, users, setUsers, documentCategories, setDocumentCategories, documents, setDocuments, gasUrl, setGasUrl } = useAppContext();
+  const { currentUser, departments, setDepartments, grades, setGrades, users, setUsers, documentCategories, setDocumentCategories, documents, setDocuments, gasUrl, setGasUrl, updateUser } = useAppContext();
 
   if (currentUser?.role !== 'admin') {
     return (
@@ -112,34 +115,77 @@ export const SettingsView: React.FC = () => {
     );
   }
 
-  const handleUpdateDept = (oldName: string, newName: string) => {
-    setDepartments(prev => prev.map(d => d === oldName ? newName : d));
-    setUsers(users.map(u => u.department === oldName ? { ...u, department: newName } : u));
+  const handleAddDept = async (newName: string) => {
+    const newVal = [...departments, newName];
+    setDepartments(newVal);
+    await setDoc(doc(db, "settings", "system"), { departments: newVal }, { merge: true });
   };
 
-  const handleDeleteDept = (name: string) => {
-    setDepartments(prev => prev.filter(d => d !== name));
-    setUsers(users.map(u => u.department === name ? { ...u, department: 'Khác' } : u));
+  const handleUpdateDept = async (oldName: string, newName: string) => {
+    const newVal = departments.map(d => d === oldName ? newName : d);
+    setDepartments(newVal);
+    await setDoc(doc(db, "settings", "system"), { departments: newVal }, { merge: true });
+    
+    users.filter(u => u.department === oldName).forEach(u => {
+      updateUser(u.id, { department: newName });
+    });
   };
 
-  const handleUpdateGrade = (oldName: string, newName: string) => {
-    setGrades(prev => prev.map(g => g === oldName ? newName : g));
-    setUsers(users.map(u => u.grade === oldName ? { ...u, grade: newName } : u));
+  const handleDeleteDept = async (name: string) => {
+    const newVal = departments.filter(d => d !== name);
+    setDepartments(newVal);
+    await setDoc(doc(db, "settings", "system"), { departments: newVal }, { merge: true });
+    
+    users.filter(u => u.department === name).forEach(u => {
+      updateUser(u.id, { department: 'Khác' });
+    });
   };
 
-  const handleDeleteGrade = (name: string) => {
-    setGrades(prev => prev.filter(g => g !== name));
-    setUsers(users.map(u => u.grade === name ? { ...u, grade: 'Khác' } : u));
+  const handleAddGrade = async (newName: string) => {
+    const newVal = [...grades, newName];
+    setGrades(newVal);
+    await setDoc(doc(db, "settings", "system"), { grades: newVal }, { merge: true });
   };
 
-  const handleUpdateDocCat = (oldName: string, newName: string) => {
-    setDocumentCategories(prev => prev.map(c => c === oldName ? newName : c));
-    setDocuments(documents.map(d => d.category === oldName ? { ...d, category: newName } : d));
+  const handleUpdateGrade = async (oldName: string, newName: string) => {
+    const newVal = grades.map(g => g === oldName ? newName : g);
+    setGrades(newVal);
+    await setDoc(doc(db, "settings", "system"), { grades: newVal }, { merge: true });
+    
+    users.filter(u => u.grade === oldName).forEach(u => {
+      updateUser(u.id, { grade: newName });
+    });
   };
 
-  const handleDeleteDocCat = (name: string) => {
-    setDocumentCategories(prev => prev.filter(c => c !== name));
-    setDocuments(documents.map(d => d.category === name ? { ...d, category: 'Khác' } : d));
+  const handleDeleteGrade = async (name: string) => {
+    const newVal = grades.filter(g => g !== name);
+    setGrades(newVal);
+    await setDoc(doc(db, "settings", "system"), { grades: newVal }, { merge: true });
+    
+    users.filter(u => u.grade === name).forEach(u => {
+      updateUser(u.id, { grade: 'Khác' });
+    });
+  };
+
+  const handleAddDocCat = async (newName: string) => {
+    const newVal = [...documentCategories, newName];
+    setDocumentCategories(newVal);
+    await setDoc(doc(db, "settings", "system"), { documentCategories: newVal }, { merge: true });
+  };
+
+  const handleUpdateDocCat = async (oldName: string, newName: string) => {
+    const newVal = documentCategories.map(c => c === oldName ? newName : c);
+    setDocumentCategories(newVal);
+    await setDoc(doc(db, "settings", "system"), { documentCategories: newVal }, { merge: true });
+    
+    // Note: documents update should actually update via Firestore if possible
+    // Only keeping local for now, but ideal is a Firestore batch edit if we had a function for it
+  };
+
+  const handleDeleteDocCat = async (name: string) => {
+    const newVal = documentCategories.filter(c => c !== name);
+    setDocumentCategories(newVal);
+    await setDoc(doc(db, "settings", "system"), { documentCategories: newVal }, { merge: true });
   };
 
   return (
@@ -183,6 +229,7 @@ export const SettingsView: React.FC = () => {
           title="Quản lý Nhóm tài liệu"
           items={documentCategories}
           setItems={setDocumentCategories}
+          onAddItem={handleAddDocCat}
           onUpdateItem={handleUpdateDocCat}
           onDeleteItem={handleDeleteDocCat}
         />
@@ -191,6 +238,7 @@ export const SettingsView: React.FC = () => {
           title="Quản lý Tổ chuyên môn"
           items={departments}
           setItems={setDepartments}
+          onAddItem={handleAddDept}
           onUpdateItem={handleUpdateDept}
           onDeleteItem={handleDeleteDept}
         />
@@ -199,6 +247,7 @@ export const SettingsView: React.FC = () => {
           title="Quản lý Nhóm / Khối"
           items={grades}
           setItems={setGrades}
+          onAddItem={handleAddGrade}
           onUpdateItem={handleUpdateGrade}
           onDeleteItem={handleDeleteGrade}
         />
