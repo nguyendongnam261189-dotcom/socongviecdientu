@@ -620,17 +620,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
         
         const assignedTo = taskSnap.data().assignedTo || [];
         if (assignedTo.length > 0) {
-          const submittedUserIds = newSubmissions.map(s => s.userId);
-          const allSubmitted = assignedTo.every((uid: string) => submittedUserIds.includes(uid));
+          const allSubmitted = assignedTo.every((uid: string) => newSubmissions.some((s: any) => s.userId === uid && (!s.status || s.status === 'done')));
           if (allSubmitted) {
             updateData.status = 'done';
           }
         }
 
+        // Optimistic update
+        setTasks((prev) =>
+          prev.map((t) => {
+            if (t.id === taskId) {
+              return { ...t, ...updateData };
+            }
+            return t;
+          }),
+        );
+
         await updateDoc(taskRef, updateData);
       }
     } catch (e) {
       console.error(e);
+      alert("Lỗi lưu DB: " + (e as Error).message);
     }
   };
 
