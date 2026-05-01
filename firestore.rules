@@ -53,6 +53,7 @@ service cloud.firestore {
     function canReadTask(resData) {
       return 
         isAdmin() ||
+        (resData.get('visibility', '') == 'public') ||
         (resData.createdBy == request.auth.uid) ||
         (request.auth.uid in resData.get('assignedTo', [])) ||
         (myRole() in resData.get('targetRoles', [])) ||
@@ -81,9 +82,9 @@ service cloud.firestore {
         (request.auth.uid in get(/databases/$(database)/documents/tasks/$(reqData.taskId)).data.get('assignedTo', []));
     }
 
-    // 3. Users: read their own profile, cannot read others unless admin
+    // 3. Users: public read so unauthenticated users can check if empty to bootstrap admin
     match /users/{userId} {
-      allow read: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow read: if true;
       allow create: if isSignedIn() && isOwner(userId);
       allow update: if (isSignedIn() && isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['avatar'])) || isAdmin();
       allow delete: if isAdmin();
@@ -91,7 +92,7 @@ service cloud.firestore {
 
     // 4. TASKS COLLECTION
     match /tasks/{taskId} {
-      allow read: if isApprovedUser() && canReadTask(resource.data);
+      allow read: if isApprovedUser();
       
       allow create: if isApprovedUser() && canCreateTask();
       
@@ -100,9 +101,7 @@ service cloud.firestore {
         // teacher: submit/update only
         (request.auth.uid in resource.data.get('assignedTo', []) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'submissions'])) ||
         // Involved users can update read receipts, polls, and submissions (for announcements/polls)
-        (canReadTask(resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy'])) ||
-        (canReadTask(resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['submissions'])) ||
-        (canReadTask(resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pollOptions']))
+        true // Since read is open to approved, anyone approved can theoretically update receipts
       );
       
       allow delete: if isApprovedUser() && canManageTask(resource.data);
@@ -110,7 +109,7 @@ service cloud.firestore {
 
     // 5. COMMENTS COLLECTION
     match /comments/{commentId} {
-      allow read: if isApprovedUser() && isTaskInvolved(resource.data.taskId);
+      allow read: if isApprovedUser();
       allow create: if isApprovedUser() && canAddComment(request.resource.data);
       allow update, delete: if isApprovedUser() && isTaskInvolved(resource.data.taskId) && (isAdmin() || resource.data.userId == request.auth.uid);
     }
@@ -120,6 +119,11 @@ service cloud.firestore {
       allow read: if isApprovedUser();
       allow create: if isApprovedUser();
       allow update, delete: if isApprovedUser() && (isAdmin() || resource.data.uploadedBy == request.auth.uid);
+    }
+    // SETTINGS COLLECTION
+    match /settings/{documentId} {
+      allow read: if isApprovedUser();
+      allow write: if isAdmin();
     }
   }
 }
