@@ -43,6 +43,8 @@ interface AppContextType {
   setDocumentCategories: React.Dispatch<React.SetStateAction<string[]>>;
   gasUrl: string;
   setGasUrl: (url: string) => void;
+  activeWeeksView: number;
+  setActiveWeeksView: (weeks: number) => void;
   // Actions
   addUser: (user: Partial<User>) => Promise<User>;
   updateUser: (id: string, updates: Partial<User>) => void;
@@ -107,6 +109,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
   const [gasUrl, setGasUrlState] = useState<string>(
     localStorage.getItem("gasUrl") || "",
   );
+  const [activeWeeksView, setActiveWeeksView] = useState(2);
   const [toast, setToast] = useState<{
     id: string;
     message: string;
@@ -120,6 +123,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
        setDoc(doc(db, "settings", "system"), { gasUrl: url }, { merge: true });
     }
   };
+
+  const updateActiveWeeksView = (weeks: number) => {
+    setActiveWeeksView(weeks);
+    if (authReady) {
+      setDoc(doc(db, "settings", "general"), { activeWeeksView: weeks }, { merge: true });
+    }
+  }
 
   const [authReady, setAuthReady] = useState(false);
 
@@ -180,6 +190,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
 
     unsubs.push(
       onSnapshot(
+        doc(db, "settings", "general"),
+        (snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.data();
+            if (data.activeWeeksView !== undefined) {
+              setActiveWeeksView(data.activeWeeksView);
+            }
+          }
+        }
+      )
+    );
+
+    unsubs.push(
+      onSnapshot(
         collection(db, "users"),
         (snapshot) => {
           setUsers(
@@ -194,7 +218,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
 
     // We must fetch all tasks because Firestore doesn't support multiple array-contains in an OR query,
     // and if we try to, it will crash and no tasks will load for non-admins.
-    const tasksQuery = query(collection(db, "tasks"));
+    
+    // Tính cutoffDate
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - activeWeeksView * 7);
+
+    const tasksQuery = query(
+      collection(db, "tasks"),
+      or(
+        where("createdAt", ">=", cutoffDate.toISOString()),
+        where("status", "in", ["todo", "doing"])
+      )
+    );
 
     unsubs.push(
       onSnapshot(
@@ -690,6 +725,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
         setDocumentCategories,
         gasUrl,
         setGasUrl,
+        activeWeeksView,
+        setActiveWeeksView: updateActiveWeeksView,
         activeTab,
         setActiveTab,
         toast,
