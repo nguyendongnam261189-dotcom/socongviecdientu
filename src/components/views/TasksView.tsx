@@ -2,15 +2,15 @@ import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { Task } from '../../types';
 import { format, isPast, parseISO, differenceInDays } from 'date-fns';
-import { CheckCircle2, Circle, Clock, FileText, Search, Zap } from 'lucide-react';
+import { CheckCircle2, Circle, Clock, FileText, Zap } from 'lucide-react';
 import { cn } from '../../utils';
 import { TaskDetail } from './TaskDetail';
 
 export const TasksView: React.FC = () => {
   const { tasks, currentUser } = useAppContext();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
   const [listFilter, setListFilter] = useState<'pending' | 'done'>('pending');
+  const [chipFilter, setChipFilter] = useState<'all' | 'urgent' | 'report' | 'overdue'>('all');
 
   // 4. Show only relevant tasks
   const relevantTasks = tasks.filter(t => {
@@ -30,14 +30,16 @@ export const TasksView: React.FC = () => {
     
     if (listFilter === 'pending' && isDone) return false;
     if (listFilter === 'done' && !isDone) return false;
-    
-    return true;
-  });
 
-  if (searchQuery.trim()) {
-    const q = searchQuery.toLowerCase();
-    displayTasks = displayTasks.filter(t => t.title.toLowerCase().includes(q) || t.description.toLowerCase().includes(q));
-  }
+    if (chipFilter === 'all') return true;
+    
+    // For other filters, typically we want to see action items (not done), but it's up to you.
+    if (chipFilter === 'urgent' && t.isUrgent) return true;
+    if (chipFilter === 'report' && isReport) return true;
+    if (chipFilter === 'overdue' && t.deadline && isPast(parseISO(t.deadline))) return true;
+
+    return false;
+  });
 
   // 2. Sort by deadline
   const sortTasks = (taskList: Task[]) => {
@@ -75,13 +77,13 @@ export const TasksView: React.FC = () => {
     <>
       <div className="flex flex-col h-full bg-slate-50">
         <div className="bg-white p-4 shadow-sm z-10 sticky top-0 border-b border-slate-200">
-          <div className="flex justify-between items-center mb-1">
+          <div className="flex justify-between items-center mb-3">
             <h2 className="font-bold text-lg text-slate-800 flex items-center justify-between">
               Nhiệm vụ của tôi
             </h2>
           </div>
-          
-          <div className="flex bg-slate-100 p-1 rounded-xl mb-3 w-full max-w-[300px]">
+
+          <div className="flex bg-slate-100 p-1 rounded-xl mb-2 w-full max-w-[300px]">
             <button
               onClick={() => setListFilter('pending')}
               className={cn("flex-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all", listFilter === 'pending' ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}
@@ -95,16 +97,32 @@ export const TasksView: React.FC = () => {
               Đã hoàn thành
             </button>
           </div>
-
-          <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input 
-              type="text"
-              placeholder="Tìm kiếm nhiệm vụ..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 text-sm rounded-xl pl-9 pr-3 py-2 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 transition-all font-medium"
-            />
+          
+          <div className="flex overflow-x-auto no-scrollbar gap-2 pb-2 mt-2 -mx-4 px-4 snap-x">
+            <button
+              onClick={() => setChipFilter('all')}
+              className={cn("whitespace-nowrap flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-bold transition-all snap-start", chipFilter === 'all' ? "bg-indigo-600 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200")}
+            >
+              Tất cả
+            </button>
+            <button
+              onClick={() => setChipFilter('urgent')}
+              className={cn("whitespace-nowrap flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-bold transition-all snap-start", chipFilter === 'urgent' ? "bg-indigo-600 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200")}
+            >
+              Cần làm ngay
+            </button>
+            <button
+              onClick={() => setChipFilter('report')}
+              className={cn("whitespace-nowrap flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-bold transition-all snap-start", chipFilter === 'report' ? "bg-indigo-600 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200")}
+            >
+              Báo cáo cần nộp
+            </button>
+            <button
+              onClick={() => setChipFilter('overdue')}
+              className={cn("whitespace-nowrap flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-bold transition-all snap-start", chipFilter === 'overdue' ? "bg-indigo-600 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200")}
+            >
+              Đã quá hạn
+            </button>
           </div>
         </div>
 
@@ -166,6 +184,7 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
   const isDone = task.status === 'done' || hasSubmittedReport;
   const isOverdue = !isDone && task.deadline && isPast(parseISO(task.deadline));
   const isDueSoon = !isDone && !isOverdue && task.deadline && differenceInDays(parseISO(task.deadline), new Date()) <= 2;
+  const isDueToday = !isDone && task.deadline && new Date().toDateString() === parseISO(task.deadline).toDateString();
 
   const commentCount = comments.filter(c => c.taskId === task.id).length;
 
@@ -189,24 +208,31 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
         "bg-white rounded-2xl shadow-sm border-l-[6px] border border-y-slate-200 border-r-slate-200 p-4 active:scale-[0.99] transition-all cursor-pointer relative overflow-hidden",
         isDone ? "border-l-slate-400 opacity-70 bg-slate-50/50" : 
         task.isUrgent ? "border-l-rose-500 border-rose-300 ring-2 ring-rose-500 ring-offset-1 bg-white hover:bg-rose-50 shadow-[0_4px_12px_rgba(244,63,94,0.1)]" :
-        // 3. Highlight: red overdue, yellow due soon
+        // Highlight: red overdue, yellow due soon
         isOverdue ? "border-l-rose-500 border-y-rose-200 border-r-rose-200 bg-rose-50/50 hover:bg-rose-50" :
         isDueSoon ? "border-l-amber-500 border-y-amber-200 border-r-amber-200 bg-amber-50/50 hover:bg-amber-50" :
         "border-l-emerald-500 border-y-emerald-200 border-r-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 hover:shadow-md"
       )}
     >
-      <div className="flex justify-between items-start mb-2.5">
-        <span className={cn(
-          "px-2 py-0.5 text-[9px] font-bold rounded uppercase tracking-wider shadow-sm flex items-center gap-1",
-          isReport ? (hasSubmittedReport ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700") :
-          task.status === 'todo' ? "bg-slate-100 text-slate-600" :
-          task.status === 'doing' ? "bg-amber-100 text-amber-700" :
-          "bg-slate-200 text-slate-600"
-        )}>
-          {task.isUrgent && !isDone && <Zap className="w-3 h-3 text-rose-500 fill-rose-500" />}
-          {isReport ? (hasSubmittedReport ? 'Đã nộp báo cáo' : 'Cần nộp báo cáo') : 
-           task.status === 'todo' ? 'Chưa làm' : task.status === 'doing' ? 'Đang làm' : 'Đã xong'}
-        </span>
+      <div className="flex justify-between items-start mb-2.5 flex-wrap gap-2">
+        <div className="flex gap-2">
+          <span className={cn(
+            "px-2 py-0.5 text-[9px] font-bold rounded uppercase tracking-wider shadow-sm flex items-center gap-1",
+            isReport ? (hasSubmittedReport ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700") :
+            task.status === 'todo' ? "bg-slate-100 text-slate-600" :
+            task.status === 'doing' ? "bg-amber-100 text-amber-700" :
+            "bg-slate-200 text-slate-600"
+          )}>
+            {task.isUrgent && !isDone && <Zap className="w-3 h-3 text-rose-500 fill-rose-500" />}
+            {isReport ? (hasSubmittedReport ? 'Đã nộp báo cáo' : 'Cần nộp báo cáo') : 
+             task.status === 'todo' ? 'Chưa làm' : task.status === 'doing' ? 'Đang làm' : 'Đã xong'}
+          </span>
+          {isDueToday && (
+            <span className="px-2 py-0.5 text-[9px] font-bold text-white bg-rose-500 rounded uppercase tracking-wider shadow-sm flex items-center gap-1 animate-pulse">
+              Hôm nay
+            </span>
+          )}
+        </div>
         
         {task.deadline && (
           <div className={cn("text-[10px] font-bold tracking-wide flex items-center gap-1", isOverdue ? "text-rose-500" : "text-slate-400 italic")}>
@@ -227,7 +253,11 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
           </button>
         )}
         <div className="flex-1 min-w-0">
-          <h3 className={cn("text-sm font-bold text-slate-800 leading-tight pr-2", (task.status === 'done' || hasSubmittedReport) && "line-through text-slate-500")}>
+          <h3 className={cn(
+            "text-sm font-bold leading-tight pr-2", 
+            (task.status === 'done' || hasSubmittedReport) ? "line-through text-slate-500" : 
+            isOverdue ? "text-rose-600" : "text-slate-800"
+          )}>
             {task.title}
           </h3>
           <p className="mt-1 text-[11px] text-slate-500 line-clamp-2 pr-2 leading-relaxed">
