@@ -4,7 +4,6 @@ import { Header } from './components/layout/Header';
 import { BottomNav } from './components/layout/BottomNav';
 import { Sidebar } from './components/layout/Sidebar';
 import { TasksView } from './components/views/TasksView';
-import { TimelineView } from './components/views/TimelineView';
 import { NotificationsView } from './components/views/NotificationsView';
 import { DocumentsView } from './components/views/DocumentsView';
 import { LoginView } from './components/views/LoginView';
@@ -70,7 +69,6 @@ const AppContent = () => {
         {activeTab === 'dashboard' && <DashboardView />}
         {activeTab === 'users' && <UsersView />}
         {activeTab === 'tasks' && <TasksView />}
-        {activeTab === 'timeline' && <TimelineView />}
         {activeTab === 'notifications' && <NotificationsView />}
         {activeTab === 'documents' && <DocumentsView />}
         {activeTab === 'settings' && <SettingsView />}
