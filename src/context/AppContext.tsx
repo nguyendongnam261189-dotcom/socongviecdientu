@@ -321,7 +321,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     );
 
     return () => unsubs.forEach((fn) => fn());
-  }, [currentUser]);
+  }, [currentUser, activeWeeksView]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
