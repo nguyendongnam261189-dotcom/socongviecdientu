@@ -74,12 +74,6 @@ export const Sidebar: React.FC = () => {
           badge={todoTasks}
         />
         <NavItem 
-          active={activeTab === 'timeline'} 
-          onClick={() => setActiveTab('timeline')}
-          icon={<CalendarDays className="w-5 h-5" />}
-          label="Tiến độ"
-        />
-        <NavItem 
           active={activeTab === 'notifications'} 
           onClick={() => setActiveTab('notifications')}
           icon={<Bell className="w-5 h-5" />}
