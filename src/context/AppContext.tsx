@@ -223,51 +223,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - activeWeeksView * 7);
 
-    const tasksQuery = query(
-      collection(db, "tasks"),
-      or(
-        where("createdAt", ">=", cutoffDate.toISOString()),
-        where("status", "in", ["todo", "doing"])
+    const q1 = query(collection(db, "tasks"), where("createdAt", ">=", cutoffDate.toISOString()));
+    const q2 = query(collection(db, "tasks"), where("status", "in", ["todo", "doing"]));
+
+    let q1Docs: Task[] = [];
+    let q2Docs: Task[] = [];
+
+    const mergeTasks = () => {
+      const allDocs = [...q1Docs, ...q2Docs];
+      // Build a unique map, preferring items from q2 or q1 docs
+      const docMap = new Map();
+      allDocs.forEach(d => docMap.set(d.id, d));
+      const uniqueDocs = Array.from(docMap.values()) as Task[];
+
+      let docs = uniqueDocs;
+          
+      if (currentUser && currentUser.role !== "admin") {
+        docs = docs.filter((t) => {
+          // 1. Creator always sees their tasks
+          if (t.createdBy === currentUser.id) return true;
+          // 2. Directly assigned individual always sees it
+          if (t.assignedTo?.includes(currentUser.id)) return true;
+          
+          // Check if any specific targeting is applied (group targeting)
+          const hasRoleTarget = t.targetRoles && t.targetRoles.length > 0;
+          const hasDeptTarget = t.targetDepartments && t.targetDepartments.length > 0;
+          const hasGradeTarget = t.targetGrades && t.targetGrades.length > 0;
+          const hasSpecificTargets = hasRoleTarget || hasDeptTarget || hasGradeTarget;
+
+          if (hasSpecificTargets) {
+            // Must match at least one of the specific targets
+            if (currentUser.role && t.targetRoles?.includes(currentUser.role)) return true;
+            if (currentUser.department && t.targetDepartments?.includes(currentUser.department)) return true;
+            if (currentUser.grade && t.targetGrades?.includes(currentUser.grade)) return true;
+            return false; // Did not match any specific target
+          }
+
+          // 3. Fallback to broad visibility completely public tasks
+          return t.visibility === "public";
+        });
+      }
+      setTasks(docs.sort((a,b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()));
+    };
+
+    unsubs.push(
+      onSnapshot(
+        q1,
+        (snapshot) => {
+          q1Docs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Task);
+          mergeTasks();
+        },
+        (error) => {
+          console.error("Error fetching tasks by date:", error);
+        }
       )
     );
 
     unsubs.push(
       onSnapshot(
-        tasksQuery,
+        q2,
         (snapshot) => {
-          let docs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Task);
-          
-          if (currentUser && currentUser.role !== "admin") {
-            docs = docs.filter((t) => {
-              // 1. Creator always sees their tasks
-              if (t.createdBy === currentUser.id) return true;
-              // 2. Directly assigned individual always sees it
-              if (t.assignedTo?.includes(currentUser.id)) return true;
-              
-              // Check if any specific targeting is applied (group targeting)
-              const hasRoleTarget = t.targetRoles && t.targetRoles.length > 0;
-              const hasDeptTarget = t.targetDepartments && t.targetDepartments.length > 0;
-              const hasGradeTarget = t.targetGrades && t.targetGrades.length > 0;
-              const hasSpecificTargets = hasRoleTarget || hasDeptTarget || hasGradeTarget;
-
-              if (hasSpecificTargets) {
-                // Must match at least one of the specific targets
-                if (currentUser.role && t.targetRoles?.includes(currentUser.role)) return true;
-                if (currentUser.department && t.targetDepartments?.includes(currentUser.department)) return true;
-                if (currentUser.grade && t.targetGrades?.includes(currentUser.grade)) return true;
-                return false; // Did not match any specific target
-              }
-
-              // 3. Fallback to broad visibility completely public tasks
-              return t.visibility === "public";
-            });
-          }
-          setTasks(docs);
+          q2Docs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Task);
+          mergeTasks();
         },
         (error) => {
-          console.error("Error fetching tasks:", error);
-        },
-      ),
+          console.error("Error fetching tasks by status:", error);
+        }
+      )
     );
 
     unsubs.push(
