@@ -90,5 +90,5 @@ export interface Document {
   createdBy: string;
 }
 
-export type TabType = 'dashboard' | 'users' | 'tasks' | 'timeline' | 'notifications' | 'documents' | 'settings';
+export type TabType = 'dashboard' | 'users' | 'tasks' | 'notifications' | 'documents' | 'settings';
 
