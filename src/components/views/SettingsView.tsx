@@ -105,7 +105,7 @@ const ManageList = ({ title, items, setItems, onAddItem, onUpdateItem, onDeleteI
 };
 
 export const SettingsView: React.FC = () => {
-  const { currentUser, departments, setDepartments, grades, setGrades, users, setUsers, documentCategories, setDocumentCategories, documents, setDocuments, gasUrl, setGasUrl, updateUser } = useAppContext();
+  const { currentUser, departments, setDepartments, grades, setGrades, users, setUsers, documentCategories, setDocumentCategories, documents, setDocuments, gasUrl, setGasUrl, updateUser, activeWeeksView, setActiveWeeksView } = useAppContext();
 
   if (currentUser?.role !== 'admin') {
     return (
@@ -207,6 +207,26 @@ export const SettingsView: React.FC = () => {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="p-4 border-b border-slate-100 bg-slate-50/50">
+            <h2 className="font-bold text-slate-800 text-sm uppercase tracking-wide">Giới hạn thời gian hiển thị công việc</h2>
+            <p className="text-xs text-slate-500 mt-1">Chọn số tuần dữ liệu gần nhất được tải về để tối ưu chi phí dữ liệu (Các task chưa hoàn thành luôn được tải).</p>
+          </div>
+          <div className="p-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[1, 2, 4, 8].map(weeks => (
+                <button
+                  key={weeks}
+                  onClick={() => setActiveWeeksView(weeks)}
+                  className={`py-3 px-4 rounded-xl border text-sm font-bold transition-all ${activeWeeksView === weeks ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm ring-1 ring-indigo-200' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                >
+                  {weeks} tuần
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="p-4 border-b border-slate-100 bg-slate-50/50">
             <h2 className="font-bold text-slate-800 text-sm uppercase tracking-wide">Cấu hình Google Apps Script (Tải lên Drive)</h2>
