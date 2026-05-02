@@ -508,6 +508,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
             setDoc(doc(db, "documents", docId), newDocData);
           });
         }
+
+        if (taskData.assignedTo && taskData.assignedTo.length > 0) {
+          const tokens = users
+            .filter(u => taskData.assignedTo!.includes(u.id))
+            .flatMap(u => u.fcmTokens || [])
+            .filter((t, i, arr) => t && arr.indexOf(t) === i);
+          
+          if (tokens.length > 0) {
+            fetch('/api/notify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                tokens,
+                title: "Công việc mới",
+                body: taskData.title,
+              }),
+            }).catch(e => console.error('Error sending push notification', e));
+          }
+        }
       })
       .catch((err) => {
         console.error("Error adding task: ", err);
