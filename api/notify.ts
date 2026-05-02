@@ -1,67 +1,61 @@
 import * as admin from 'firebase-admin';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-// Hàm xử lý Private Key: Xóa dấu ngoặc kép thừa (nếu có) và xử lý ký tự ngắt dòng
-const formatPrivateKey = (key?: string) => {
-  if (!key) return undefined;
-  return key.replace(/\\n/g, '\n').replace(/^"|"$/g, '');
-};
-
-// Khởi tạo Firebase Admin an toàn
-if (!admin.apps.length) {
-  try {
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: formatPrivateKey(process.env.FIREBASE_PRIVATE_KEY),
-      }),
-    });
-  } catch (error) {
-    console.error('Lỗi khởi tạo Firebase Admin:', error);
-  }
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Chỉ chấp nhận POST
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
   try {
-    // Ép kiểu an toàn: Tránh trường hợp Vercel không tự parse JSON
-    const bodyPayload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-    
-    // Đổi tên biến body thành notificationBody để không trùng lặp
-    const { tokens, title, body: notificationBody } = bodyPayload;
+    // 1. Kiểm tra và định dạng lại Key
+    const rawKey = process.env.FIREBASE_PRIVATE_KEY;
+    let formattedKey = rawKey;
 
-    if (!tokens || !Array.isArray(tokens) || tokens.length === 0) {
-      return res.status(400).json({ error: 'Không có tokens nào được gửi lên' });
+    if (rawKey && !rawKey.includes('BEGIN')) {
+      // Nếu là Base64, giải mã
+      formattedKey = Buffer.from(rawKey, 'base64').toString('utf8');
+    } else if (rawKey) {
+      // Nếu là chữ thô, xử lý xuống dòng
+      formattedKey = rawKey.replace(/\\n/g, '\n');
     }
 
-    if (!title || !notificationBody) {
-      return res.status(400).json({ error: 'Thiếu tiêu đề hoặc nội dung thông báo' });
+    // 2. Khởi tạo Firebase Admin (Chỉ khởi tạo nếu chưa có)
+    if (!admin.apps.length) {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey: formattedKey,
+        }),
+      });
     }
 
-    const message = {
-      notification: {
-        title: title,
-        body: notificationBody,
-      },
-      tokens: tokens,
-    };
+    // 3. Xử lý logic gửi thông báo (Giả lập code của bạn)
+    if (req.method === 'POST') {
+      const { token, title, body } = req.body;
+      
+      if (!token) {
+         return res.status(400).json({ error: 'Thiếu token thiết bị' });
+      }
 
-    // Thực hiện bắn thông báo
-    const response = await admin.messaging().sendEachForMulticast(message);
-    
-    return res.status(200).json({ success: true, response });
-    
+      const message = {
+        notification: { title, body },
+        token: token,
+      };
+
+      const response = await admin.messaging().send(message);
+      return res.status(200).json({ success: true, messageId: response });
+    } else {
+      return res.status(405).json({ error: 'Chỉ chấp nhận method POST' });
+    }
+
   } catch (error: any) {
-    console.error('Lỗi khi bắn thông báo đẩy:', error);
-    // Trả về chính xác thông báo lỗi của Firebase để dễ dàng bắt bệnh
-    return res.status(500).json({ 
-      error: 'Lỗi máy chủ nội bộ', 
-      detail: error.message || 'Không có chi tiết lỗi' 
+    // ĐÂY LÀ PHẦN QUAN TRỌNG NHẤT: BẮT VÀ IN LỖI RA MÀN HÌNH
+    return res.status(500).json({
+      error_type: "Lỗi hệ thống Firebase",
+      exact_message: error.message, // Thông báo lỗi chi tiết từ Firebase
+      environment_check: {
+        has_projectId: !!process.env.FIREBASE_PROJECT_ID,
+        has_clientEmail: !!process.env.FIREBASE_CLIENT_EMAIL,
+        has_privateKey: !!process.env.FIREBASE_PRIVATE_KEY,
+        key_is_base64: process.env.FIREBASE_PRIVATE_KEY ? !process.env.FIREBASE_PRIVATE_KEY.includes('BEGIN') : false
+      }
     });
   }
 }
