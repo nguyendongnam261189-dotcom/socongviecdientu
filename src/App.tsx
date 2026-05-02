@@ -16,6 +16,25 @@ import { SettingsView } from './components/views/SettingsView';
 import { RotateCcw } from 'lucide-react';
 
 const AppContent = () => {
+  // Thêm vào trong hàm AppContent của App.tsx
+React.useEffect(() => {
+  let startY = 0;
+  const handleTouchStart = (e: TouchEvent) => {
+    startY = e.touches[0].pageY;
+  };
+  const handleTouchEnd = (e: TouchEvent) => {
+    // Nếu kéo xuống quá 150px và đang ở đỉnh trang
+    if (window.scrollY === 0 && e.changedTouches[0].pageY - startY > 150) {
+      window.location.reload();
+    }
+  };
+  window.addEventListener('touchstart', handleTouchStart);
+  window.addEventListener('touchend', handleTouchEnd);
+  return () => {
+    window.removeEventListener('touchstart', handleTouchStart);
+    window.removeEventListener('touchend', handleTouchEnd);
+  };
+}, []);
   const { activeTab, currentUser, toast, hideToast, authReady, logout } = useAppContext();
 
   if (!authReady) {
