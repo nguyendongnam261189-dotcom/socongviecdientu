@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { User, Task, Comment, Document, TabType, UserTaskStatus } from "../types";
-import { auth, db } from "../firebase";
+import { auth, db, messaging } from "../firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import { getToken, onMessage } from "firebase/messaging";
 import {
   collection,
   onSnapshot,
@@ -369,6 +370,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
 
     return () => unsubscribe();
   }, []);
+
+  const requestNotificationPermission = async () => {
+    try {
+      if (!messaging) return;
+      
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted' && currentUser) {
+        const token = await getToken(messaging);
+        
+        if (token) {
+          const userRef = doc(db, 'users', currentUser.id);
+          const userSnap = await getDoc(userRef);
+          
+          if (userSnap.exists()) {
+            const userData = userSnap.data();
+            const currentTokens = userData.fcmTokens || [];
+            
+            if (!currentTokens.includes(token)) {
+              await updateDoc(userRef, {
+                fcmTokens: [...currentTokens, token]
+              });
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('An error occurred while requesting notification permission:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser && messaging) {
+      requestNotificationPermission();
+
+      const unsubscribeMessage = onMessage(messaging, (payload) => {
+        showToast(`🔔 ${payload.notification?.title || 'Thông báo mới'}: ${payload.notification?.body || ''}`);
+      });
+
+      return () => unsubscribeMessage();
+    }
+  }, [currentUser]);
 
   const handleLogout = async () => {
     try {
