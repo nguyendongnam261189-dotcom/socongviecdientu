@@ -166,7 +166,6 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
     }).map(u => u.id);
   };
 
-  // HÀM XỬ LÝ ĐÃ ĐƯỢC CẬP NHẬT ĐỂ ĐỌC ĐÚNG MẢNG "fcmTokens"
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const assignedTo = resolveAssignedUsers();
@@ -232,39 +231,37 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
       showToast('Tạo thành công!');
     }
     
-    // 2. Kích hoạt gửi thông báo (Đã xử lý fcmTokens dạng mảng)
+    // 2. Kích hoạt gửi thông báo (ĐÃ SỬA: Gửi 1 lần với mảng)
     try {
       const targetedUsers = users.filter(u => assignedTo.includes(u.id));
       const validTokens: string[] = [];
 
-      // Quét từng người dùng và lôi toàn bộ token trong mảng fcmTokens ra
+      // Lấy toàn bộ token của những người được giao
       targetedUsers.forEach((u: any) => {
         if (u.fcmTokens && Array.isArray(u.fcmTokens)) {
-          // Nếu là mảng, đẩy toàn bộ token vào danh sách gửi
           validTokens.push(...u.fcmTokens);
         } else if (typeof u.fcmTokens === 'string') {
-          // Dự phòng trường hợp có dữ liệu cũ là chuỗi
           validTokens.push(u.fcmTokens);
         }
       });
 
-      // Lọc bỏ các token rỗng và trùng lặp
+      // Lọc bỏ trùng lặp và rỗng
       const uniqueTokens = Array.from(new Set(validTokens)).filter(t => t);
 
-      // Gửi từng token lên Vercel
-      uniqueTokens.forEach(async (deviceToken) => {
-        await fetch('/api/notify', {
+      // GỌI API ĐÚNG 1 LẦN NẾU CÓ TOKEN
+      if (uniqueTokens.length > 0) {
+        fetch('/api/notify', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            token: deviceToken,
+            tokens: uniqueTokens, // <--- GỬI MẢNG Ở ĐÂY
             title: initialTask ? `Đã cập nhật: ${title}` : `Công việc mới: ${title}`,
             body: description || 'Bạn có một công việc/thông báo mới trên hệ thống.'
           })
-        });
-      });
+        }).catch(err => console.error("Lỗi gửi notify:", err));
+      }
     } catch (error) {
       console.error('Lỗi khi kích hoạt trạm phát sóng Vercel:', error);
     }
