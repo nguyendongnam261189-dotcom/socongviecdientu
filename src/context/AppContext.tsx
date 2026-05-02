@@ -395,7 +395,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
         showToast("Đang kết nối lấy thẻ bài...");
         
         // VAPID KEY của bạn được giữ nguyên
-        const token = await getToken(messaging, { vapidKey: 'CTb8x7_Qg6NQNy3Qzj2pIDTCZLrFT93_Bsa4Dvty5wk' });
+        const token = await getToken(messaging, { vapidKey: 'BOKFE2fVHSOI0uzg364C_LLAUcFSkUxgoX4KImQj62f0M5-0ftC3-toh8e7aLf7K4pdDF4ppnA1RiCMrBnjTfOk' });
         
         if (token) {
           const userRef = doc(db, 'users', currentUser.id);
