@@ -11,6 +11,7 @@ export interface User {
   status: UserStatus;
   avatar?: string;
   phone?: string;
+  fcmTokens?: string[];
   createdAt: string;
 }
 
