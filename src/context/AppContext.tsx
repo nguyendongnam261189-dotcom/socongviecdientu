@@ -374,10 +374,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const requestNotificationPermission = async () => {
     try {
-      if (!messaging) return;
-      
+      if (!('Notification' in window)) {
+        alert("Thiết bị hoặc trình duyệt này không hỗ trợ thông báo đẩy.");
+        return;
+      }
+
+      if (!messaging) {
+        alert("Hệ thống thông báo đang khởi động, vui lòng đợi 3 giây rồi bấm lại. Nếu vẫn hiện thông báo này, có thể bạn chưa 'Thêm vào màn hình chính' chuẩn xác.");
+        return;
+      }
+
       const permission = await Notification.requestPermission();
+      
+      if (permission === 'denied') {
+        alert("Bạn đã vô tình bấm CHẶN quyền thông báo trước đó. Vui lòng vào Cài đặt > Safari trên iPhone để mở lại quyền cho trang web này.");
+        return;
+      }
+
       if (permission === 'granted' && currentUser) {
+        showToast("Đang kết nối lấy thẻ bài...");
+        
+        // VAPID KEY của bạn được giữ nguyên
         const token = await getToken(messaging, { vapidKey: 'CTb8x7_Qg6NQNy3Qzj2pIDTCZLrFT93_Bsa4Dvty5wk' });
         
         if (token) {
@@ -393,15 +410,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
                 fcmTokens: [...currentTokens, token]
               });
             }
-            showToast("✅ Đã kết nối nhận thông báo đẩy thành công!");
           }
+          showToast("✅ Đã kết nối nhận thông báo đẩy thành công!");
+          // Tự động tải lại trang để ẩn cái nút/banner đi
+          setTimeout(() => window.location.reload(), 2000);
+        } else {
+          alert("Lỗi: Không lấy được mã Token từ Apple.");
         }
       }
-    } catch (error) {
-      console.error('An error occurred while requesting notification permission:', error);
+    } catch (error: any) {
+      alert("Lỗi hệ thống: " + error.message);
+      console.error(error);
     }
   };
-
   useEffect(() => {
     if (currentUser && messaging) {
       const unsubscribeMessage = onMessage(messaging, (payload) => {
