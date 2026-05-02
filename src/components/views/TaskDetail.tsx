@@ -55,7 +55,11 @@ const FilePreview: React.FC<{ title: string, url: string }> = ({ title, url }) =
             </div>
             <div className="flex-1 bg-slate-100 p-2 overflow-hidden">
               {isImage ? (
-                <img src={url} alt={title} className="w-full h-full object-contain" />
+                <img 
+                  src={fileId ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w1200` : url} 
+                  alt={title} 
+                  className="w-full h-full object-contain" 
+                />
               ) : (
                 <iframe src={embedUrl} className="w-full h-full rounded-lg" title="Preview" />
               )}
