@@ -377,7 +377,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
       
       const permission = await Notification.requestPermission();
       if (permission === 'granted' && currentUser) {
-        const token = await getToken(messaging, { vapidKey: 'DÁN_VAPID_KEY_VÀO_ĐÂY' });
+        const token = await getToken(messaging, { vapidKey: 'CTb8x7_Qg6NQNy3Qzj2pIDTCZLrFT93_Bsa4Dvty5wk' });
         
         if (token) {
           const userRef = doc(db, 'users', currentUser.id);
