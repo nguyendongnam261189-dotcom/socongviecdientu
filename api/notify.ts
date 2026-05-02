@@ -1,4 +1,5 @@
-import * as admin from 'firebase-admin';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getMessaging } from 'firebase-admin/messaging';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -12,16 +13,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       formattedKey = Buffer.from(formattedKey, 'base64').toString('utf8');
     }
 
-    // 3. QUAN TRỌNG NHẤT: Ép tất cả các chữ \n thành dấu xuống dòng thật sự
+    // 3. Ép tất cả các chữ \n thành dấu xuống dòng thật sự (Để tránh lỗi PEM)
     if (formattedKey) {
       formattedKey = formattedKey.replace(/\\n/g, '\n');
     }
 
-    // 4. Khởi tạo Firebase cực kỳ an toàn
+    // 4. Khởi tạo Firebase bằng cú pháp chuẩn v12
     try {
-      if (!admin.apps || admin.apps.length === 0) {
-        admin.initializeApp({
-          credential: admin.credential.cert({
+      if (getApps().length === 0) {
+        initializeApp({
+          credential: cert({
             projectId: process.env.FIREBASE_PROJECT_ID,
             clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
             privateKey: formattedKey,
@@ -42,7 +43,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          return res.status(400).json({ error: 'Thiếu token thiết bị' });
       }
 
-      const response = await admin.messaging().send({
+      // Dùng getMessaging() chuẩn v12
+      const response = await getMessaging().send({
         notification: { title, body },
         token: token,
       });
