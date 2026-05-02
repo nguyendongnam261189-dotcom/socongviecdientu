@@ -14,63 +14,56 @@ interface TaskDetailProps {
 }
 
 const FilePreview: React.FC<{ title: string, url: string }> = ({ title, url }) => {
+  const [isOpen, setIsOpen] = useState(false);
   const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(title) || url.startsWith('data:image/');
-  const isPdf = /\.(pdf)$/i.test(title) || url.startsWith('data:application/pdf');
   
+  // Logic trích xuất ID Google Drive
   const driveMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
   const fileId = driveMatch ? driveMatch[1] : null;
-
-  const [isOpen, setIsOpen] = useState(false);
-
-  // If it's a base64 image or pdf, we can just show it directly
-  if (!fileId && !isImage && !isPdf) {
-    return (
-      <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:bg-indigo-50 hover:border-indigo-200 transition-colors cursor-pointer text-sm shadow-sm group bg-white">
-        <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-          <Paperclip className="w-4 h-4" />
-        </div>
-        <span className="font-bold text-slate-700 truncate flex-1">{title}</span>
-        <Download className="w-4 h-4 text-slate-400 group-hover:text-indigo-600" />
-      </a>
-    );
-  }
+  const embedUrl = fileId ? `https://drive.google.com/file/d/${fileId}/preview` : url;
 
   return (
-    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
-      <div 
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-3 p-3 hover:bg-slate-50 transition-colors cursor-pointer text-sm"
+    <>
+      {/* Nút bấm hiển thị tài liệu */}
+      <button 
+        onClick={() => setIsOpen(true)}
+        className="flex items-center gap-3 p-3 w-full rounded-xl border border-slate-200 hover:bg-indigo-50 hover:border-indigo-200 transition-all cursor-pointer text-sm shadow-sm group bg-white text-left"
       >
-        <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+        <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
           {isImage ? <FileText className="w-4 h-4" /> : <Paperclip className="w-4 h-4" />}
         </div>
-        <span className="font-bold text-slate-700 truncate flex-1">{title}</span>
-        <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">
-          {isOpen ? 'Thu gọn' : 'Xem trực tiếp'}
-        </span>
-        <a href={url} download={title} onClick={e => e.stopPropagation()} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100">
-           <Download className="w-4 h-4" />
-        </a>
-      </div>
-      
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-slate-700 truncate">{title}</p>
+          <p className="text-[10px] text-slate-400 font-medium">Bấm để xem trực tiếp</p>
+        </div>
+      </button>
+
+      {/* Modal xem trước */}
       {isOpen && (
-        <div className="border-t border-slate-100 bg-slate-50 p-2 flex justify-center">
-          {isImage ? (
-            <img 
-              src={fileId ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w1200` : url} 
-              alt={title} 
-              className="max-w-full max-h-[70vh] object-contain rounded-lg border border-slate-200 shadow-sm"
-            />
-          ) : (
-            <iframe 
-              src={fileId ? `https://drive.google.com/file/d/${fileId}/preview` : url} 
-              className="w-full h-[60vh] rounded-lg border border-slate-200 shadow-sm"
-              allow="autoplay"
-            />
-          )}
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-4xl h-[85vh] rounded-2xl flex flex-col shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100">
+              <h3 className="font-bold text-slate-800 truncate pr-4">{title}</h3>
+              <div className="flex gap-2">
+                <a href={url} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100">
+                  Mở link gốc
+                </a>
+                <button onClick={() => setIsOpen(false)} className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">
+                  Đóng
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 bg-slate-100 p-2 overflow-hidden">
+              {isImage ? (
+                <img src={url} alt={title} className="w-full h-full object-contain" />
+              ) : (
+                <iframe src={embedUrl} className="w-full h-full rounded-lg" title="Preview" />
+              )}
+            </div>
+          </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 
