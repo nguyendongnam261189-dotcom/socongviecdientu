@@ -9,6 +9,7 @@ import { DocumentsView } from './components/views/DocumentsView';
 import { LoginView } from './components/views/LoginView';
 import { DashboardView } from './components/views/DashboardView';
 import { UsersView } from './components/views/UsersView';
+import { StatisticsView } from './components/views/StatisticsView';
 
 import { SettingsView } from './components/views/SettingsView';
 
@@ -68,6 +69,7 @@ const AppContent = () => {
       <main className="flex-1 overflow-hidden relative flex flex-col md:max-w-6xl md:mx-auto md:w-full md:border-x md:border-slate-200 md:bg-white md:shadow-xl scroll-smooth">
         {activeTab === 'dashboard' && <DashboardView />}
         {activeTab === 'users' && <UsersView />}
+        {activeTab === 'statistics' && <StatisticsView />}
         {activeTab === 'tasks' && <TasksView />}
         {activeTab === 'notifications' && <NotificationsView />}
         {activeTab === 'documents' && <DocumentsView />}
