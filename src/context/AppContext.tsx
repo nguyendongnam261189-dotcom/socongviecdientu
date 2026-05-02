@@ -371,12 +371,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => unsubscribe();
   }, []);
 
-  const requestNotificationPermission = async () => {
+ const requestNotificationPermission = async (retryCount = 0) => {
     try {
-      if (!messaging) return;
-      
+      // 1. Chờ messaging khởi tạo xong (thử lại tối đa 5 lần)
+      if (!messaging) {
+        if (retryCount < 5) {
+          setTimeout(() => requestNotificationPermission(retryCount + 1), 1000);
+        }
+        return;
+      }
+
       const permission = await Notification.requestPermission();
       if (permission === 'granted' && currentUser) {
+        // VAPID Key của bạn đã được giữ nguyên
         const token = await getToken(messaging, { vapidKey: 'CTb8x7_Qg6NQNy3Qzj2pIDTCZLrFT93_Bsa4Dvty5wk' });
         
         if (token) {
@@ -391,24 +398,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
               await updateDoc(userRef, {
                 fcmTokens: [...currentTokens, token]
               });
+              // 2. Báo hiệu thành công ngay trên màn hình điện thoại!
+              showToast("✅ Đã kết nối nhận thông báo đẩy thành công!");
             }
           }
         }
       }
     } catch (error) {
-      console.error('An error occurred while requesting notification permission:', error);
+      console.error('Lỗi khi lấy token thông báo:', error);
     }
   };
 
   useEffect(() => {
-    if (currentUser && messaging) {
+    if (currentUser) {
+      // Gọi hàm xin quyền ngay, hàm sẽ tự động chờ messaging
       requestNotificationPermission();
 
-      const unsubscribeMessage = onMessage(messaging, (payload) => {
-        showToast(`🔔 ${payload.notification?.title || 'Thông báo mới'}: ${payload.notification?.body || ''}`);
-      });
+      // Liên tục kiểm tra xem messaging đã sẵn sàng để lắng nghe chưa
+      let unsubscribeMessage = () => {};
+      const checkAndListen = setInterval(() => {
+        if (messaging) {
+          unsubscribeMessage = onMessage(messaging, (payload) => {
+            showToast(`🔔 ${payload.notification?.title}: ${payload.notification?.body}`);
+          });
+          clearInterval(checkAndListen);
+        }
+      }, 1000);
 
-      return () => unsubscribeMessage();
+      return () => {
+        clearInterval(checkAndListen);
+        unsubscribeMessage();
+      };
     }
   }, [currentUser]);
 
