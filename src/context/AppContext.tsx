@@ -492,68 +492,74 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     });
   };
 
-  const addTask = (taskData: Omit<Task, "id" | "createdAt">) => {
-    const newId = doc(collection(db, "tasks")).id;
-    const newTask: Task = {
-      ...taskData,
-      id: newId,
-      createdAt: new Date().toISOString(),
-    };
-    if (taskData.category === "announcement" || taskData.category === "poll") {
-      newTask.readBy = [];
-    }
-    if (taskData.category === "task") {
-      newTask.submissions = [];
-    }
+ const addTask = (taskData: Omit<Task, "id" | "createdAt">) => {
+  const newId = doc(collection(db, "tasks")).id;
+  const newTask: Task = {
+    ...taskData,
+    id: newId,
+    createdAt: new Date().toISOString(),
+  };
 
-    // Optimistic
-    setTasks((prev) => [newTask, ...prev]);
+  if (taskData.category === "announcement" || taskData.category === "poll") {
+    newTask.readBy = [];
+  }
+  if (taskData.category === "task") {
+    newTask.submissions = [];
+  }
 
-    // Firestore
-    setDoc(doc(db, "tasks", newId), newTask)
-      .then(() => {
-        if (
-          taskData.category === "announcement" &&
-          taskData.attachments &&
-          taskData.attachments.length > 0
-        ) {
-          taskData.attachments.forEach((att) => {
-            const docId = doc(collection(db, "documents")).id;
-            const newDocData: Document = {
-              id: docId,
-              title: att.title || taskData.title,
-              driveUrl: att.url,
-              createdAt: new Date().toISOString(),
-              createdBy: taskData.createdBy,
-            } as Document;
-            setDoc(doc(db, "documents", docId), newDocData);
+  setTasks((prev) => [newTask, ...prev]);
+
+  setDoc(doc(db, "tasks", newId), newTask)
+    .then(() => {
+      if (
+        taskData.category === "announcement" &&
+        taskData.attachments &&
+        taskData.attachments.length > 0
+      ) {
+        taskData.attachments.forEach((att) => {
+          const docId = doc(collection(db, "documents")).id;
+          const newDocData: Document = {
+            id: docId,
+            title: att.title || taskData.title,
+            driveUrl: att.url,
+            createdAt: new Date().toISOString(),
+            createdBy: taskData.createdBy,
+          } as Document;
+          setDoc(doc(db, "documents", docId), newDocData);
+        });
+      }
+
+      // 🔥🔥🔥 FIX NOTIFY DUY NHẤT Ở ĐÂY
+      if (taskData.assignedTo && taskData.assignedTo.length > 0) {
+        const tokens = users
+          .filter((u) => taskData.assignedTo!.includes(u.id))
+          .flatMap((u) => u.fcmTokens || [])
+          .filter((t, i, arr) => t && arr.indexOf(t) === i);
+
+        if (tokens.length > 0) {
+          tokens.forEach(async (t) => {
+            try {
+              await fetch("/api/notify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  token: t, // ✅ sửa đúng chỗ này
+                  title: "Công việc mới: " + taskData.title,
+                  body: "Nhiệm vụ từ " + currentUser?.name,
+                }),
+              });
+            } catch (e) {
+              console.error("Error sending push notification", e);
+            }
           });
         }
-
-        if (taskData.assignedTo && taskData.assignedTo.length > 0) {
-          const tokens = users
-            .filter(u => taskData.assignedTo!.includes(u.id))
-            .flatMap(u => u.fcmTokens || [])
-            .filter((t, i, arr) => t && arr.indexOf(t) === i);
-          
-          if (tokens.length > 0) {
-            fetch('/api/notify', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                tokens,
-                title: "Công việc mới: " + taskData.title,
-                body: "Nhiệm vụ từ " + currentUser?.name,
-              }),
-            }).catch(e => console.error('Error sending push notification', e));
-          }
-        }
-      })
-      .catch((err) => {
-        console.error("Error adding task: ", err);
-        alert("Lỗi khi thêm task: " + err.message);
-      });
-  };
+      }
+    })
+    .catch((err) => {
+      console.error("Error adding task: ", err);
+      alert("Lỗi khi thêm task: " + err.message);
+    });
+};
 
   const editTask = (taskId: string, updates: Partial<Task>, notifyAgain: boolean) => {
     setTasks(prev => prev.map(t => {
