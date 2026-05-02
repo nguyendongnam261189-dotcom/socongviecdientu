@@ -2,59 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { FileText, ExternalLink, Search, Filter } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
-const FilePreview: React.FC<{ title: string, url: string }> = ({ title, url }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(title) || url.startsWith('data:image/');
-  
-  // Logic trích xuất ID Google Drive
-  const driveMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-  const fileId = driveMatch ? driveMatch[1] : null;
-  const embedUrl = fileId ? `https://drive.google.com/file/d/${fileId}/preview` : url;
 
-  return (
-    <>
-      {/* Nút bấm hiển thị tài liệu */}
-      <button 
-        onClick={() => setIsOpen(true)}
-        className="flex items-center gap-3 p-3 w-full rounded-xl border border-slate-200 hover:bg-indigo-50 hover:border-indigo-200 transition-all cursor-pointer text-sm shadow-sm group bg-white text-left"
-      >
-        <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-          {isImage ? <FileText className="w-4 h-4" /> : <Paperclip className="w-4 h-4" />}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="font-bold text-slate-700 truncate">{title}</p>
-          <p className="text-[10px] text-slate-400 font-medium">Bấm để xem trực tiếp</p>
-        </div>
-      </button>
-
-      {/* Modal xem trước */}
-      {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-4xl h-[85vh] rounded-2xl flex flex-col shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-slate-100">
-              <h3 className="font-bold text-slate-800 truncate pr-4">{title}</h3>
-              <div className="flex gap-2">
-                <a href={url} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100">
-                  Mở link gốc
-                </a>
-                <button onClick={() => setIsOpen(false)} className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">
-                  Đóng
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 bg-slate-100 p-2 overflow-hidden">
-              {isImage ? (
-                <img src={url} alt={title} className="w-full h-full object-contain" />
-              ) : (
-                <iframe src={embedUrl} className="w-full h-full rounded-lg" title="Preview" />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-};
 export const DocumentsView: React.FC = () => {
   const { documents, tasks, documentCategories } = useAppContext();
   const [searchQuery, setSearchQuery] = useState('');
@@ -141,32 +89,32 @@ export const DocumentsView: React.FC = () => {
           <span>Danh sách tài liệu ({filteredDocs.length})</span>
         </div>
         
-       {filteredDocs.map(doc => (
-  <div 
-    key={doc.id} 
-    className="block bg-white p-4 rounded-2xl shadow-sm border border-slate-200 hover:border-emerald-300 hover:shadow-md transition-all group"
-  >
-    <div className="flex items-center gap-3">
-      {/* Sử dụng FilePreview mới để thay thế cho icon cũ */}
-      <div className="flex-1 min-w-0">
-        <FilePreview title={doc.title} url={doc.driveUrl} />
-        
-        {/* Phần thông tin bổ sung bên dưới FilePreview */}
-        <div className="flex items-center gap-2 mt-2 px-1">
-          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600">
-            {doc.category}
-          </span>
-          <p className="text-[10px] font-medium text-slate-400 truncate">
-            Từ: {doc.sourceTitle}
-          </p>
-          <p className="text-[10px] font-medium text-slate-400 tracking-wide uppercase ml-auto">
-            {format(parseISO(doc.createdAt), 'dd/MM/yyyy')}
-          </p>
-        </div>
-      </div>
-    </div>
-  </div>
-))}
+        {filteredDocs.map(doc => (
+          <a key={doc.id} href={doc.driveUrl} target="_blank" rel="noopener noreferrer" className="block bg-white p-4 rounded-2xl shadow-sm border border-slate-200 hover:border-emerald-300 hover:shadow-md transition-all group">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-600 shadow-sm transition-transform group-hover:scale-105">
+                <FileText className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-sm text-slate-800 truncate pr-4">
+                  {doc.title}
+                </h3>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                    {doc.category}
+                  </span>
+                  <p className="text-[10px] font-medium text-slate-400 truncate">
+                    Từ: {doc.sourceTitle}
+                  </p>
+                </div>
+                <p className="text-[10px] font-medium text-slate-400 mt-1 tracking-wide uppercase">
+                  Ngày lưu: {format(parseISO(doc.createdAt), 'dd/MM/yyyy')}
+                </p>
+              </div>
+              <ExternalLink className="w-4 h-4 text-slate-300 group-hover:text-emerald-500 transition-colors" />
+            </div>
+          </a>
+        ))}
         {filteredDocs.length === 0 && (
           <div className="text-center py-12 text-slate-400 text-sm font-medium">
             Không tìm thấy tài liệu phù hợp.
