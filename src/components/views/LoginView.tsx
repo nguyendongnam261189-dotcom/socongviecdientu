@@ -83,7 +83,11 @@ export const LoginView: React.FC = () => {
       }
     } catch (error: any) {
       console.error(error);
-      alert('Đăng nhập thất bại: ' + error.message);
+      if (error.code === 'auth/popup-closed-by-user') {
+        alert('Bạn đã hủy quá trình đăng nhập.');
+      } else {
+        alert('Đăng nhập thất bại: ' + error.message);
+      }
     } finally {
       setLoading(false);
     }
