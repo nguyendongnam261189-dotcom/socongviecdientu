@@ -1,31 +1,40 @@
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getMessaging } from 'firebase-admin/messaging';
+import * as admin from 'firebase-admin';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    // 1. Giải mã Private Key
+    // 1. Lấy Key từ Vercel
     const rawKey = process.env.FIREBASE_PRIVATE_KEY;
-    let formattedKey = rawKey;
+    let formattedKey = rawKey || '';
 
-    if (rawKey && !rawKey.includes('BEGIN')) {
-      formattedKey = Buffer.from(rawKey, 'base64').toString('utf8');
-    } else if (rawKey) {
-      formattedKey = rawKey.replace(/\\n/g, '\n');
+    // 2. Giải mã Base64 (Nếu Key không chứa chữ BEGIN)
+    if (formattedKey && !formattedKey.includes('BEGIN')) {
+      formattedKey = Buffer.from(formattedKey, 'base64').toString('utf8');
     }
 
-    // 2. Khởi tạo Firebase bằng cú pháp v12 mới nhất
-    if (getApps().length === 0) {
-      initializeApp({
-        credential: cert({
-          projectId: process.env.FIREBASE_PROJECT_ID,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey: formattedKey,
-        }),
-      });
+    // 3. QUAN TRỌNG NHẤT: Ép tất cả các chữ \n thành dấu xuống dòng thật sự
+    if (formattedKey) {
+      formattedKey = formattedKey.replace(/\\n/g, '\n');
     }
 
-    // 3. Gửi thông báo
+    // 4. Khởi tạo Firebase cực kỳ an toàn
+    try {
+      if (!admin.apps || admin.apps.length === 0) {
+        admin.initializeApp({
+          credential: admin.credential.cert({
+            projectId: process.env.FIREBASE_PROJECT_ID,
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+            privateKey: formattedKey,
+          }),
+        });
+      }
+    } catch (initErr: any) {
+      if (initErr.code !== 'app/duplicate-app') {
+        throw new Error("Lỗi lúc khởi tạo Firebase: " + initErr.message);
+      }
+    }
+
+    // 5. Xử lý Gửi thông báo
     if (req.method === 'POST') {
       const { token, title, body } = req.body;
       
@@ -33,12 +42,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          return res.status(400).json({ error: 'Thiếu token thiết bị' });
       }
 
-      const message = {
+      const response = await admin.messaging().send({
         notification: { title, body },
         token: token,
-      };
-
-      const response = await getMessaging().send(message);
+      });
+      
+      // THÀNH CÔNG RỒI!
       return res.status(200).json({ success: true, messageId: response });
     } else {
       return res.status(405).json({ error: 'Chỉ chấp nhận method POST' });
@@ -47,8 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (error: any) {
     return res.status(500).json({
       error_type: "Lỗi hệ thống Firebase",
-      exact_message: error.message,
-      check: "Đã vào khối catch"
+      exact_message: error.message
     });
   }
 }
