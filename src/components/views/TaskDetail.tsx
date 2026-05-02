@@ -17,14 +17,12 @@ const FilePreview: React.FC<{ title: string, url: string }> = ({ title, url }) =
   const [isOpen, setIsOpen] = useState(false);
   const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(title) || url.startsWith('data:image/');
   
-  // Logic trích xuất ID Google Drive
   const driveMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
   const fileId = driveMatch ? driveMatch[1] : null;
   const embedUrl = fileId ? `https://drive.google.com/file/d/${fileId}/preview` : url;
 
   return (
     <>
-      {/* Nút bấm hiển thị tài liệu */}
       <button 
         onClick={() => setIsOpen(true)}
         className="flex items-center gap-3 p-3 w-full rounded-xl border border-slate-200 hover:bg-indigo-50 hover:border-indigo-200 transition-all cursor-pointer text-sm shadow-sm group bg-white text-left"
@@ -38,30 +36,44 @@ const FilePreview: React.FC<{ title: string, url: string }> = ({ title, url }) =
         </div>
       </button>
 
-      {/* Modal xem trước */}
+      {/* Modal xem trước CHỐNG TREO */}
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-4xl h-[85vh] rounded-2xl flex flex-col shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-slate-100">
-              <h3 className="font-bold text-slate-800 truncate pr-4">{title}</h3>
-              <div className="flex gap-2">
-                <a href={url} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100">
-                  Mở link gốc
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200 overscroll-none touch-none"
+          onClick={() => setIsOpen(false)} // Bấm vào nền đen để đóng
+        >
+          <div 
+            className="bg-white w-full max-w-4xl h-[90vh] rounded-2xl flex flex-col shadow-2xl overflow-hidden relative"
+            onClick={(e) => e.stopPropagation()} // Ngăn click nhầm xuyên thấu
+          >
+            {/* Thanh Header Modal luôn cố định */}
+            <div className="flex items-center justify-between p-3 sm:p-4 border-b border-slate-100 bg-white z-10 shrink-0">
+              <h3 className="font-bold text-sm sm:text-base text-slate-800 truncate pr-4">{title}</h3>
+              <div className="flex gap-2 shrink-0">
+                <a href={url} target="_blank" rel="noopener noreferrer" className="px-3 py-2 text-xs font-bold text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
+                  Mở link
                 </a>
-                <button onClick={() => setIsOpen(false)} className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">
+                <button onClick={() => setIsOpen(false)} className="px-4 py-2 text-xs font-bold text-white bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors shadow-sm">
                   Đóng
                 </button>
               </div>
             </div>
-            <div className="flex-1 bg-slate-100 p-2 overflow-hidden">
+            
+            {/* Nội dung Iframe/Ảnh */}
+            <div className="flex-1 bg-slate-100 overflow-auto relative" style={{ WebkitOverflowScrolling: 'touch' }}>
               {isImage ? (
                 <img 
                   src={fileId ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w1200` : url} 
                   alt={title} 
-                  className="w-full h-full object-contain" 
+                  className="w-full h-full object-contain p-2" 
                 />
               ) : (
-                <iframe src={embedUrl} className="w-full h-full rounded-lg" title="Preview" />
+                <iframe 
+                  src={embedUrl} 
+                  className="absolute top-0 left-0 w-full h-full border-0" 
+                  title="Preview"
+                  loading="lazy"
+                />
               )}
             </div>
           </div>
@@ -70,7 +82,6 @@ const FilePreview: React.FC<{ title: string, url: string }> = ({ title, url }) =
     </>
   );
 };
-
 export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
   const { comments, users, currentUser, addComment, updateTaskStatus, deleteTask, submitReport, showToast, markTaskRead, gasUrl } = useAppContext();
   const [isUploadingFiles, setIsUploadingFiles] = useState(false);
