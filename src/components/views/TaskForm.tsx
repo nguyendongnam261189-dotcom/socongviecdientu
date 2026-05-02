@@ -166,6 +166,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
     }).map(u => u.id);
   };
 
+  // ĐÃ ĐƯỢC CHỈNH SỬA: HÀM XỬ LÝ LƯU VÀ GỬI THÔNG BÁO
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const assignedTo = resolveAssignedUsers();
@@ -222,6 +223,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
       newTaskParams.pollMultipleChoice = pollMultipleChoice;
     }
 
+    // 1. Lưu dữ liệu vào hệ thống
     if (initialTask) {
       editTask(initialTask.id, newTaskParams, notifyAgain);
       showToast('Cập nhật thành công!');
@@ -230,6 +232,34 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
       showToast('Tạo thành công!');
     }
     
+    // 2. Kích hoạt gửi thông báo đẩy (Push Notification)
+    try {
+      // Tìm thông tin những người được giao
+      const targetedUsers = users.filter(u => assignedTo.includes(u.id));
+
+      // Quét tìm mã token của điện thoại (bọc sẵn các trường hợp đặt tên biến)
+      const validTokens = targetedUsers
+        .map((u: any) => u.fcmToken || u.token || u.deviceToken) 
+        .filter(t => t); // Loại bỏ những người chưa có token
+
+      // Gửi lệnh cho Vercel bắn thông báo
+      validTokens.forEach(async (deviceToken) => {
+        await fetch('/api/notify', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            token: deviceToken,
+            title: initialTask ? `Đã cập nhật: ${title}` : `Công việc mới: ${title}`,
+            body: description || 'Bạn có một công việc/thông báo mới trên hệ thống.'
+          })
+        });
+      });
+    } catch (error) {
+      console.error('Lỗi khi kích hoạt trạm phát sóng Vercel:', error);
+    }
+
     onBack();
   };
 
@@ -491,58 +521,58 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
              
              {targetType === 'specific' && (
                <div className="space-y-4 pt-2 border-t border-slate-100">
-                  {/* Roles */}
-                  <div>
-                    <span className="text-[11px] font-bold text-slate-400 uppercase mb-2 block">Theo chức vụ</span>
-                    <div className="flex flex-wrap gap-2">
-                      {(['admin', 'leader', 'teacher'] as Role[]).map(role => (
-                        <button
-                          key={role}
-                          type="button"
-                          onClick={() => toggleArrayItem(selectedRoles, setSelectedRoles, role)}
-                          className={cn("px-3 py-1.5 rounded-full text-xs font-bold transition-all border", selectedRoles.includes(role) ? "bg-indigo-100 border-indigo-200 text-indigo-700" : "bg-slate-50 text-slate-600")}
-                        >
-                          {role === 'admin' ? 'BGH' : role === 'leader' ? 'Tổ trưởng' : 'Giáo viên'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {/* Departments */}
-                  <div>
-                    <span className="text-[11px] font-bold text-slate-400 uppercase mb-2 block">Theo tổ chuyên môn</span>
-                    <div className="flex flex-wrap gap-2">
-                      {uniqueDepartments.map(dept => (
-                        <button
-                          key={dept}
-                          type="button"
-                          onClick={() => toggleArrayItem(selectedDepartments, setSelectedDepartments, dept)}
-                          className={cn("px-3 py-1.5 rounded-full text-xs font-bold transition-all border", selectedDepartments.includes(dept) ? "bg-amber-100 border-amber-200 text-amber-700" : "bg-slate-50 text-slate-600")}
-                        >
-                          {dept}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {/* Grades */}
-                  <div>
-                    <span className="text-[11px] font-bold text-slate-400 uppercase mb-2 block">Theo khối</span>
-                    <div className="flex flex-wrap gap-2">
-                      {uniqueGrades.map(grade => (
-                        <button
-                          key={grade}
-                          type="button"
-                          onClick={() => toggleArrayItem(selectedGrades, setSelectedGrades, grade)}
-                          className={cn("px-3 py-1.5 rounded-full text-xs font-bold transition-all border", selectedGrades.includes(grade) ? "bg-emerald-100 border-emerald-200 text-emerald-700" : "bg-slate-50 text-slate-600")}
-                        >
-                          {grade}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div className="bg-blue-50 text-blue-800 text-xs p-3 rounded-lg border border-blue-100">
-                    Sẽ gửi đến: <b>{resolveAssignedUsers().length}</b> người dùng thỏa mãn TẤT CẢ các điều kiện trên.
-                  </div>
+                 {/* Roles */}
+                 <div>
+                   <span className="text-[11px] font-bold text-slate-400 uppercase mb-2 block">Theo chức vụ</span>
+                   <div className="flex flex-wrap gap-2">
+                     {(['admin', 'leader', 'teacher'] as Role[]).map(role => (
+                       <button
+                         key={role}
+                         type="button"
+                         onClick={() => toggleArrayItem(selectedRoles, setSelectedRoles, role)}
+                         className={cn("px-3 py-1.5 rounded-full text-xs font-bold transition-all border", selectedRoles.includes(role) ? "bg-indigo-100 border-indigo-200 text-indigo-700" : "bg-slate-50 text-slate-600")}
+                       >
+                         {role === 'admin' ? 'BGH' : role === 'leader' ? 'Tổ trưởng' : 'Giáo viên'}
+                       </button>
+                     ))}
+                   </div>
+                 </div>
+                 {/* Departments */}
+                 <div>
+                   <span className="text-[11px] font-bold text-slate-400 uppercase mb-2 block">Theo tổ chuyên môn</span>
+                   <div className="flex flex-wrap gap-2">
+                     {uniqueDepartments.map(dept => (
+                       <button
+                         key={dept}
+                         type="button"
+                         onClick={() => toggleArrayItem(selectedDepartments, setSelectedDepartments, dept)}
+                         className={cn("px-3 py-1.5 rounded-full text-xs font-bold transition-all border", selectedDepartments.includes(dept) ? "bg-amber-100 border-amber-200 text-amber-700" : "bg-slate-50 text-slate-600")}
+                       >
+                         {dept}
+                       </button>
+                     ))}
+                   </div>
+                 </div>
+                 {/* Grades */}
+                 <div>
+                   <span className="text-[11px] font-bold text-slate-400 uppercase mb-2 block">Theo khối</span>
+                   <div className="flex flex-wrap gap-2">
+                     {uniqueGrades.map(grade => (
+                       <button
+                         key={grade}
+                         type="button"
+                         onClick={() => toggleArrayItem(selectedGrades, setSelectedGrades, grade)}
+                         className={cn("px-3 py-1.5 rounded-full text-xs font-bold transition-all border", selectedGrades.includes(grade) ? "bg-emerald-100 border-emerald-200 text-emerald-700" : "bg-slate-50 text-slate-600")}
+                       >
+                         {grade}
+                       </button>
+                     ))}
+                   </div>
+                 </div>
+                 
+                 <div className="bg-blue-50 text-blue-800 text-xs p-3 rounded-lg border border-blue-100">
+                   Sẽ gửi đến: <b>{resolveAssignedUsers().length}</b> người dùng thỏa mãn TẤT CẢ các điều kiện trên.
+                 </div>
                </div>
              )}
 
