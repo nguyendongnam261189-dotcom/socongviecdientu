@@ -10,20 +10,42 @@ const firebaseConfig = {
   messagingSenderId: "370831062165"
 };
 
-// Khởi tạo Firebase app trong Service Worker
 firebase.initializeApp(firebaseConfig);
 
-// Khởi tạo Firebase Messaging
 const messaging = firebase.messaging();
 
+// 🔥 Android / Chrome
 messaging.onBackgroundMessage((payload) => {
-  console.log('[firebase-messaging-sw.js] Received background message ', payload);
-  
-  const notificationTitle = payload.notification?.title || 'Thông báo mới';
-  const notificationOptions = {
+  console.log('🔥 Background message:', payload);
+
+  const title = payload.notification?.title || 'Thông báo mới';
+  const options = {
     body: payload.notification?.body,
     icon: '/icon-192.png'
   };
 
-  self.registration.showNotification(notificationTitle, notificationOptions);
+  self.registration.showNotification(title, options);
+});
+
+// 🔥🔥🔥 QUAN TRỌNG NHẤT CHO iPHONE
+self.addEventListener('push', function(event) {
+  console.log('📱 iOS Push event:', event);
+
+  let data = {};
+
+  try {
+    data = event.data.json();
+  } catch (e) {
+    console.log('Push parse error', e);
+  }
+
+  const title = data.notification?.title || 'Thông báo mới';
+  const options = {
+    body: data.notification?.body || '',
+    icon: '/icon-192.png'
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(title, options)
+  );
 });
