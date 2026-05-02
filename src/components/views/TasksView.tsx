@@ -7,10 +7,12 @@ import { cn } from '../../utils';
 import { TaskDetail } from './TaskDetail';
 
 export const TasksView: React.FC = () => {
-  const { tasks, currentUser } = useAppContext();
+  const { tasks, currentUser, requestNotificationPermission } = useAppContext();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [listFilter, setListFilter] = useState<'pending' | 'done'>('pending');
   const [chipFilter, setChipFilter] = useState<'all' | 'urgent' | 'report' | 'overdue'>('all');
+
+  const showNotificationBanner = 'Notification' in window && Notification.permission !== 'granted';
 
   // 4. Show only relevant tasks
   const relevantTasks = tasks.filter(t => {
@@ -128,6 +130,19 @@ export const TasksView: React.FC = () => {
 
         {/* Task List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
+          {/* Notification Banner */}
+          {showNotificationBanner && (
+            <div className="bg-blue-100 border-l-4 border-blue-500 p-4 mb-4 flex justify-between items-center">
+              <span className="text-blue-800 font-medium text-sm pr-2">🔔 Kích hoạt thông báo đẩy để không bỏ lỡ công việc khẩn cấp!</span>
+              <button
+                onClick={requestNotificationPermission}
+                className="bg-blue-700 hover:bg-blue-800 text-white px-3 py-1.5 rounded text-xs font-bold whitespace-nowrap transition-colors shadow-sm"
+              >
+                Bật ngay
+              </button>
+            </div>
+          )}
+
           {displayTasks.length === 0 ? (
             <div className="text-center text-slate-500 mt-10 font-medium">Không có công việc nào.</div>
           ) : (
