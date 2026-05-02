@@ -13,7 +13,7 @@ export const TasksView: React.FC = () => {
   const [chipFilter, setChipFilter] = useState<'all' | 'urgent' | 'report' | 'overdue'>('all');
 
   const hasToken = (currentUser as any)?.fcmTokens && (currentUser as any).fcmTokens.length > 0;
-const showNotificationBanner = 'Notification' in window && !hasToken;
+  const showNotificationBanner = 'Notification' in window && !hasToken;
 
   // 4. Show only relevant tasks
   const relevantTasks = tasks.filter(t => {
@@ -28,15 +28,15 @@ const showNotificationBanner = 'Notification' in window && !hasToken;
   
   let displayTasks = relevantTasks.filter(t => {
     const isReport = !!t.reportTemplate;
-    const hasSubmittedReport = isReport && !!t.submissions?.find(r => r.userId === currentUser?.id);
-    const isDone = t.status === 'done' || hasSubmittedReport;
+    const mySubmission = t.submissions?.find(r => r.userId === currentUser?.id);
+    
+    // Đồng bộ trạng thái: Tính là xong nếu task bị đóng global HOẶC cá nhân đã làm xong HOẶC đã nộp báo cáo
+    const isDone = t.status === 'done' || mySubmission?.status === 'done' || (isReport && !!mySubmission);
     
     if (listFilter === 'pending' && isDone) return false;
     if (listFilter === 'done' && !isDone) return false;
 
     if (chipFilter === 'all') return true;
-    
-    // For other filters, typically we want to see action items (not done), but it's up to you.
     if (chipFilter === 'urgent' && t.isUrgent) return true;
     if (chipFilter === 'report' && isReport) return true;
     if (chipFilter === 'overdue' && t.deadline && isPast(parseISO(t.deadline))) return true;
@@ -61,7 +61,10 @@ const showNotificationBanner = 'Notification' in window && !hasToken;
 
   displayTasks.forEach(t => {
     const isReport = !!t.reportTemplate;
-    const isDone = t.status === 'done' || (isReport && !!t.submissions?.find(r => r.userId === currentUser?.id));
+    const mySubmission = t.submissions?.find(r => r.userId === currentUser?.id);
+    
+    // Áp dụng cùng logic đồng bộ trạng thái
+    const isDone = t.status === 'done' || mySubmission?.status === 'done' || (isReport && !!mySubmission);
     
     if (isDone) {
       completed.push(t);
@@ -193,11 +196,16 @@ const showNotificationBanner = 'Notification' in window && !hasToken;
 };
 
 const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick }) => {
-  const { updateTaskStatus, comments, showToast, currentUser } = useAppContext();
+  const { submitReport, comments, showToast, currentUser } = useAppContext();
   
   const isReport = !!task.reportTemplate;
-  const hasSubmittedReport = isReport && !!task.submissions?.find(r => r.userId === currentUser?.id);
-  const isDone = task.status === 'done' || hasSubmittedReport;
+  const myReport = task.submissions?.find(r => r.userId === currentUser?.id);
+  
+  // Xác định trạng thái đã xong dựa trên tiến độ CÁ NHÂN
+  const isIndividuallyDone = myReport?.status === 'done';
+  const hasSubmittedReport = isReport && !!myReport;
+  const isDone = task.status === 'done' || isIndividuallyDone || hasSubmittedReport;
+  
   const isOverdue = !isDone && task.deadline && isPast(parseISO(task.deadline));
   const isDueSoon = !isDone && !isOverdue && task.deadline && differenceInDays(parseISO(task.deadline), new Date()) <= 2;
   const isDueToday = !isDone && task.deadline && new Date().toDateString() === parseISO(task.deadline).toDateString();
@@ -208,12 +216,13 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
     e.stopPropagation();
     if (isReport) return;
     
-    const oldStatus = task.status;
-    const newStatus = task.status === 'done' ? 'todo' : 'done';
-    updateTaskStatus(task.id, newStatus);
+    const newIndividualStatus = isIndividuallyDone ? 'todo' : 'done';
+    
+    // GỌI HÀM SUBMIT REPORT ĐỂ CẬP NHẬT TIẾN ĐỘ CÁ NHÂN, GIỐNG HỆT NHƯ BÊN TRONG TASKDETAIL
+    submitReport(task.id, myReport?.content || '', myReport?.fileUrl || '', myReport?.data || {}, newIndividualStatus);
+    
     showToast(
-      newStatus === 'done' ? 'Đã đánh dấu hoàn thành' : 'Đã chuyển về chưa làm',
-      () => updateTaskStatus(task.id, oldStatus)
+      newIndividualStatus === 'done' ? 'Đã đánh dấu hoàn thành' : 'Đã chuyển về chưa làm'
     );
   };
 
@@ -224,7 +233,6 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
         "bg-white rounded-2xl shadow-sm border-l-[6px] border border-y-slate-200 border-r-slate-200 p-4 active:scale-[0.99] transition-all cursor-pointer relative overflow-hidden",
         isDone ? "border-l-slate-400 opacity-70 bg-slate-50/50" : 
         task.isUrgent ? "border-l-rose-500 border-rose-300 ring-2 ring-rose-500 ring-offset-1 bg-white hover:bg-rose-50 shadow-[0_4px_12px_rgba(244,63,94,0.1)]" :
-        // Highlight: red overdue, yellow due soon
         isOverdue ? "border-l-rose-500 border-y-rose-200 border-r-rose-200 bg-rose-50/50 hover:bg-rose-50" :
         isDueSoon ? "border-l-amber-500 border-y-amber-200 border-r-amber-200 bg-amber-50/50 hover:bg-amber-50" :
         "border-l-emerald-500 border-y-emerald-200 border-r-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 hover:shadow-md"
@@ -235,13 +243,13 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
           <span className={cn(
             "px-2 py-0.5 text-[9px] font-bold rounded uppercase tracking-wider shadow-sm flex items-center gap-1",
             isReport ? (hasSubmittedReport ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700") :
-            task.status === 'todo' ? "bg-slate-100 text-slate-600" :
-            task.status === 'doing' ? "bg-amber-100 text-amber-700" :
-            "bg-slate-200 text-slate-600"
+            isDone ? "bg-slate-200 text-slate-600" :
+            myReport?.status === 'doing' ? "bg-amber-100 text-amber-700" :
+            "bg-slate-100 text-slate-600"
           )}>
             {task.isUrgent && !isDone && <Zap className="w-3 h-3 text-rose-500 fill-rose-500" />}
             {isReport ? (hasSubmittedReport ? 'Đã nộp báo cáo' : 'Cần nộp báo cáo') : 
-             task.status === 'todo' ? 'Chưa làm' : task.status === 'doing' ? 'Đang làm' : 'Đã xong'}
+             isDone ? 'Đã xong' : myReport?.status === 'doing' ? 'Đang làm' : 'Chưa làm'}
           </span>
           {isDueToday && (
             <span className="px-2 py-0.5 text-[9px] font-bold text-white bg-rose-500 rounded uppercase tracking-wider shadow-sm flex items-center gap-1 animate-pulse">
@@ -261,17 +269,17 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
       <div className="flex gap-3 items-start mt-1">
         {isReport ? (
           <div className="mt-0.5 flex-shrink-0 text-slate-400 z-10">
-            {hasSubmittedReport ? <CheckCircle2 className="w-5 h-5 text-emerald-500" /> : <FileText className="w-5 h-5 text-rose-400" />}
+            {isDone ? <CheckCircle2 className="w-5 h-5 text-emerald-500" /> : <FileText className="w-5 h-5 text-rose-400" />}
           </div>
         ) : (
           <button onClick={toggleStatus} className="mt-0.5 flex-shrink-0 text-slate-300 hover:text-indigo-600 transition-colors z-10">
-            {task.status === 'done' ? <CheckCircle2 className="w-5 h-5 text-emerald-500" /> : <Circle className="w-5 h-5" />}
+            {isDone ? <CheckCircle2 className="w-5 h-5 text-emerald-500" /> : <Circle className="w-5 h-5" />}
           </button>
         )}
         <div className="flex-1 min-w-0">
           <h3 className={cn(
             "text-sm font-bold leading-tight pr-2", 
-            (task.status === 'done' || hasSubmittedReport) ? "line-through text-slate-500" : 
+            isDone ? "line-through text-slate-500" : 
             isOverdue ? "text-rose-600" : "text-slate-800"
           )}>
             {task.title}
@@ -295,11 +303,10 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
             </span>
           )}
         </div>
-        {(task.status === 'done' || hasSubmittedReport) && (
+        {isDone && (
           <span className="text-emerald-600 italic normal-case font-medium">✓ Hoàn thành</span>
         )}
       </div>
     </div>
   );
 };
-
