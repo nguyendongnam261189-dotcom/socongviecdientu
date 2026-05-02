@@ -71,13 +71,13 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
 
     setIsUploading(true);
     const fileName = `${Date.now()}_${file.name}`;
-    setUploadProgress(prev => ({ ...prev, [fileName]: 10 })); // Đang đọc file
+    setUploadProgress(prev => ({ ...prev, [fileName]: 10 }));
 
     try {
       const reader = new FileReader();
       reader.onload = async (event) => {
         const base64Data = (event.target?.result as string).split(',')[1];
-        setUploadProgress(prev => ({ ...prev, [fileName]: 50 })); // Đang tải lên Drive...
+        setUploadProgress(prev => ({ ...prev, [fileName]: 50 }));
         
         try {
           const folderPath = `QuanLyTruongHoc/${new Date().getFullYear()}/Thang_${new Date().getMonth() + 1}/${category === 'task' ? 'CongViec' : category === 'announcement' ? 'ThongBao' : category === 'poll' ? 'KhaoSat' : 'Khac'}`;
@@ -166,7 +166,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
     }).map(u => u.id);
   };
 
-  // ĐÃ ĐƯỢC CHỈNH SỬA: HÀM XỬ LÝ LƯU VÀ GỬI THÔNG BÁO
+  // HÀM XỬ LÝ ĐÃ ĐƯỢC CẬP NHẬT ĐỂ ĐỌC ĐÚNG MẢNG "fcmTokens"
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const assignedTo = resolveAssignedUsers();
@@ -223,7 +223,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
       newTaskParams.pollMultipleChoice = pollMultipleChoice;
     }
 
-    // 1. Lưu dữ liệu vào hệ thống
+    // 1. Lưu vào Database
     if (initialTask) {
       editTask(initialTask.id, newTaskParams, notifyAgain);
       showToast('Cập nhật thành công!');
@@ -232,18 +232,27 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
       showToast('Tạo thành công!');
     }
     
-    // 2. Kích hoạt gửi thông báo đẩy (Push Notification)
+    // 2. Kích hoạt gửi thông báo (Đã xử lý fcmTokens dạng mảng)
     try {
-      // Tìm thông tin những người được giao
       const targetedUsers = users.filter(u => assignedTo.includes(u.id));
+      const validTokens: string[] = [];
 
-      // Quét tìm mã token của điện thoại (bọc sẵn các trường hợp đặt tên biến)
-      const validTokens = targetedUsers
-        .map((u: any) => u.fcmToken || u.token || u.deviceToken) 
-        .filter(t => t); // Loại bỏ những người chưa có token
+      // Quét từng người dùng và lôi toàn bộ token trong mảng fcmTokens ra
+      targetedUsers.forEach((u: any) => {
+        if (u.fcmTokens && Array.isArray(u.fcmTokens)) {
+          // Nếu là mảng, đẩy toàn bộ token vào danh sách gửi
+          validTokens.push(...u.fcmTokens);
+        } else if (typeof u.fcmTokens === 'string') {
+          // Dự phòng trường hợp có dữ liệu cũ là chuỗi
+          validTokens.push(u.fcmTokens);
+        }
+      });
 
-      // Gửi lệnh cho Vercel bắn thông báo
-      validTokens.forEach(async (deviceToken) => {
+      // Lọc bỏ các token rỗng và trùng lặp
+      const uniqueTokens = Array.from(new Set(validTokens)).filter(t => t);
+
+      // Gửi từng token lên Vercel
+      uniqueTokens.forEach(async (deviceToken) => {
         await fetch('/api/notify', {
           method: 'POST',
           headers: {
