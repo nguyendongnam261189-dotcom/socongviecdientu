@@ -531,10 +531,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
 
       // 🔥🔥🔥 FIX NOTIFY DUY NHẤT Ở ĐÂY
       if (taskData.assignedTo && taskData.assignedTo.length > 0) {
-        const tokens = users
-          .filter((u) => taskData.assignedTo!.includes(u.id))
-          .flatMap((u) => u.fcmTokens || [])
-          .filter((t, i, arr) => t && arr.indexOf(t) === i);
+       let tokens: string[] = [];
+
+taskData.assignedTo?.forEach(uid => {
+  const user = users.find(u => u.id === uid);
+  if (user && user.fcmTokens && user.fcmTokens.length > 0) {
+    tokens.push(...user.fcmTokens);
+  }
+});
+
+tokens = [...new Set(tokens)];
+
+console.log("TOKENS FINAL:", tokens);
 
         if (tokens.length > 0) {
           tokens.forEach(async (t) => {
