@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { CheckSquare, Bell, FileText, LayoutDashboard, Users, Settings, CalendarDays } from 'lucide-react';
+import { CheckSquare, Bell, FileText, LayoutDashboard, Users, Settings, CalendarDays, BarChart3 } from 'lucide-react';
 import { cn, isTaskVisible } from '../../utils';
 
 export const BottomNav: React.FC = () => {
@@ -42,6 +42,14 @@ export const BottomNav: React.FC = () => {
             onClick={() => setActiveTab('dashboard')}
             icon={<LayoutDashboard className="w-5 h-5" />}
             label="Quản lý"
+          />
+        )}
+        {isAdminOrLeader && (
+          <NavItem 
+            active={activeTab === 'statistics'} 
+            onClick={() => setActiveTab('statistics')}
+            icon={<BarChart3 className="w-5 h-5" />}
+            label="Thống kê"
           />
         )}
         <NavItem 
