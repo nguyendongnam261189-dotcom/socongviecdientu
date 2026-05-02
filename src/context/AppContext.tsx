@@ -377,7 +377,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
       
       const permission = await Notification.requestPermission();
       if (permission === 'granted' && currentUser) {
-        const token = await getToken(messaging);
+        const token = await getToken(messaging, { vapidKey: 'DÁN_VAPID_KEY_VÀO_ĐÂY' });
         
         if (token) {
           const userRef = doc(db, 'users', currentUser.id);
@@ -521,8 +521,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 tokens,
-                title: "Công việc mới",
-                body: taskData.title,
+                title: "Công việc mới: " + taskData.title,
+                body: "Nhiệm vụ từ " + currentUser?.name,
               }),
             }).catch(e => console.error('Error sending push notification', e));
           }
