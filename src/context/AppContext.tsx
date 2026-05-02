@@ -47,6 +47,7 @@ interface AppContextType {
   activeWeeksView: number;
   setActiveWeeksView: (weeks: number) => void;
   // Actions
+  requestNotificationPermission: () => Promise<void>;
   addUser: (user: Partial<User>) => Promise<User>;
   updateUser: (id: string, updates: Partial<User>) => void;
   deleteUser: (id: string) => void;
@@ -371,19 +372,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => unsubscribe();
   }, []);
 
- const requestNotificationPermission = async (retryCount = 0) => {
+  const requestNotificationPermission = async () => {
     try {
-      // 1. Chờ messaging khởi tạo xong (thử lại tối đa 5 lần)
-      if (!messaging) {
-        if (retryCount < 5) {
-          setTimeout(() => requestNotificationPermission(retryCount + 1), 1000);
-        }
-        return;
-      }
-
+      if (!messaging) return;
+      
       const permission = await Notification.requestPermission();
       if (permission === 'granted' && currentUser) {
-        // VAPID Key của bạn đã được giữ nguyên
         const token = await getToken(messaging, { vapidKey: 'CTb8x7_Qg6NQNy3Qzj2pIDTCZLrFT93_Bsa4Dvty5wk' });
         
         if (token) {
@@ -398,37 +392,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
               await updateDoc(userRef, {
                 fcmTokens: [...currentTokens, token]
               });
-              // 2. Báo hiệu thành công ngay trên màn hình điện thoại!
-              showToast("✅ Đã kết nối nhận thông báo đẩy thành công!");
             }
+            showToast("✅ Đã kết nối nhận thông báo đẩy thành công!");
           }
         }
       }
     } catch (error) {
-      console.error('Lỗi khi lấy token thông báo:', error);
+      console.error('An error occurred while requesting notification permission:', error);
     }
   };
 
   useEffect(() => {
-    if (currentUser) {
-      // Gọi hàm xin quyền ngay, hàm sẽ tự động chờ messaging
-      requestNotificationPermission();
+    if (currentUser && messaging) {
+      const unsubscribeMessage = onMessage(messaging, (payload) => {
+        showToast(`🔔 ${payload.notification?.title || 'Thông báo mới'}: ${payload.notification?.body || ''}`);
+      });
 
-      // Liên tục kiểm tra xem messaging đã sẵn sàng để lắng nghe chưa
-      let unsubscribeMessage = () => {};
-      const checkAndListen = setInterval(() => {
-        if (messaging) {
-          unsubscribeMessage = onMessage(messaging, (payload) => {
-            showToast(`🔔 ${payload.notification?.title}: ${payload.notification?.body}`);
-          });
-          clearInterval(checkAndListen);
-        }
-      }, 1000);
-
-      return () => {
-        clearInterval(checkAndListen);
-        unsubscribeMessage();
-      };
+      return () => unsubscribeMessage();
     }
   }, [currentUser]);
 
@@ -836,6 +816,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
         showToast,
         hideToast,
         authReady,
+        requestNotificationPermission,
         addUser,
         updateUser,
         deleteUser,
