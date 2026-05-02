@@ -12,7 +12,8 @@ export const TasksView: React.FC = () => {
   const [listFilter, setListFilter] = useState<'pending' | 'done'>('pending');
   const [chipFilter, setChipFilter] = useState<'all' | 'urgent' | 'report' | 'overdue'>('all');
 
-  const showNotificationBanner = 'Notification' in window && Notification.permission !== 'granted';
+  const hasToken = (currentUser as any)?.fcmTokens && (currentUser as any).fcmTokens.length > 0;
+const showNotificationBanner = 'Notification' in window && !hasToken;
 
   // 4. Show only relevant tasks
   const relevantTasks = tasks.filter(t => {
