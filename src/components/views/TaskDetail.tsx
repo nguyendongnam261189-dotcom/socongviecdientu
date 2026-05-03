@@ -13,6 +13,7 @@ interface TaskDetailProps {
   onBack: () => void;
 }
 
+
 const FilePreview: React.FC<{ title: string, url: string }> = ({ title, url }) => {
   const [isOpen, setIsOpen] = useState(false);
   const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(title) || url.startsWith('data:image/');
@@ -20,60 +21,59 @@ const FilePreview: React.FC<{ title: string, url: string }> = ({ title, url }) =
   const driveMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
   const fileId = driveMatch ? driveMatch[1] : null;
   const embedUrl = fileId ? `https://drive.google.com/file/d/${fileId}/preview` : url;
+  const downloadUrl = fileId ? `https://drive.google.com/uc?export=download&id=${fileId}` : url;
+
+  const handleDownload = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    window.open(downloadUrl, '_blank');
+  };
 
   return (
     <>
-      <button 
-        onClick={() => setIsOpen(true)}
-        className="flex items-center gap-3 p-3 w-full rounded-xl border border-slate-200 hover:bg-indigo-50 hover:border-indigo-200 transition-all cursor-pointer text-sm shadow-sm group bg-white text-left"
-      >
-        <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-          {isImage ? <FileText className="w-4 h-4" /> : <Paperclip className="w-4 h-4" />}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="font-bold text-slate-700 truncate">{title}</p>
-          <p className="text-[10px] text-slate-400 font-medium">Bấm để xem trực tiếp</p>
-        </div>
-      </button>
+      <div className="flex gap-2 w-full">
+        <button 
+          onClick={() => setIsOpen(true)}
+          className="flex items-center gap-3 p-3 flex-1 rounded-xl border border-slate-200 hover:bg-indigo-50 transition-all cursor-pointer text-sm shadow-sm bg-white text-left"
+        >
+          <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+            {isImage ? <FileText className="w-4 h-4" /> : <Paperclip className="w-4 h-4" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-slate-700 truncate">{title}</p>
+            <p className="text-[10px] text-slate-400 font-medium">Bấm để xem nhanh</p>
+          </div>
+        </button>
+        <button 
+          onClick={handleDownload}
+          className="p-3 bg-slate-100 text-slate-600 rounded-xl border border-slate-200 hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
+        >
+          <Download className="w-5 h-5" />
+        </button>
+      </div>
 
-      {/* Modal xem trước CHỐNG TREO */}
       {isOpen && (
         <div 
-          className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200 overscroll-none touch-none"
-          onClick={() => setIsOpen(false)} // Bấm vào nền đen để đóng
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-2 bg-slate-900/90 backdrop-blur-md"
+          onClick={() => setIsOpen(false)}
         >
           <div 
-            className="bg-white w-full max-w-4xl h-[90vh] rounded-2xl flex flex-col shadow-2xl overflow-hidden relative"
-            onClick={(e) => e.stopPropagation()} // Ngăn click nhầm xuyên thấu
+            className="bg-white w-full max-w-4xl h-[90vh] rounded-2xl flex flex-col shadow-2xl relative pointer-events-auto"
+            onClick={(e) => e.stopPropagation()} 
           >
-            {/* Thanh Header Modal luôn cố định */}
-            <div className="flex items-center justify-between p-3 sm:p-4 border-b border-slate-100 bg-white z-10 shrink-0">
-              <h3 className="font-bold text-sm sm:text-base text-slate-800 truncate pr-4">{title}</h3>
-              <div className="flex gap-2 shrink-0">
-                <a href={url} target="_blank" rel="noopener noreferrer" className="px-3 py-2 text-xs font-bold text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
-                  Mở link
-                </a>
-                <button onClick={() => setIsOpen(false)} className="px-4 py-2 text-xs font-bold text-white bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors shadow-sm">
-                  Đóng
+            <div className="flex items-center justify-between p-3 border-b bg-white shrink-0">
+              <h3 className="font-bold text-sm text-slate-800 truncate pr-4 flex-1">{title}</h3>
+              <div className="flex gap-2 items-center">
+                <button onClick={handleDownload} className="px-3 py-2 text-xs font-bold text-white bg-emerald-600 rounded-lg flex items-center gap-1">
+                  <Download className="w-3.5 h-3.5" /> Tải xuống
                 </button>
+                <button onClick={() => setIsOpen(false)} className="p-2 text-slate-400 bg-slate-100 rounded-lg"><X className="w-5 h-5" /></button>
               </div>
             </div>
-            
-            {/* Nội dung Iframe/Ảnh */}
-            <div className="flex-1 bg-slate-100 overflow-auto relative" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <div className="flex-1 bg-slate-100 relative">
               {isImage ? (
-                <img 
-                  src={fileId ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w1200` : url} 
-                  alt={title} 
-                  className="w-full h-full object-contain p-2" 
-                />
+                <img src={fileId ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w1200` : url} alt={title} className="w-full h-full object-contain p-2" />
               ) : (
-                <iframe 
-                  src={embedUrl} 
-                  className="absolute top-0 left-0 w-full h-full border-0" 
-                  title="Preview"
-                  loading="lazy"
-                />
+                <iframe src={embedUrl} className="w-full h-full border-0" title="Preview" loading="lazy" />
               )}
             </div>
           </div>
