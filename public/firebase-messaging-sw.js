@@ -24,7 +24,9 @@ messaging.onBackgroundMessage((payload) => {
     icon: '/icon-192.png'
   };
 
-  self.registration.showNotification(title, options);
+  // ĐÃ KHÓA: Thư viện Firebase đã tự động hiện thông báo rồi.
+  // Khóa dòng này lại để không bị đẻ thêm thông báo thứ 2.
+  // self.registration.showNotification(title, options);
 });
 
 // 🔥🔥🔥 QUAN TRỌNG NHẤT CHO iPHONE
@@ -45,7 +47,11 @@ self.addEventListener('push', function(event) {
     icon: '/icon-192.png'
   };
 
+  // ĐÃ KHÓA: Thư viện Firebase ở trên cũng đã tự động bắt sự kiện Push này.
+  // Khóa đoạn này lại để không bị đẻ thêm thông báo thứ 3.
+  /*
   event.waitUntil(
     self.registration.showNotification(title, options)
   );
+  */
 });
