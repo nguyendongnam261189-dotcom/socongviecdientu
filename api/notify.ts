@@ -40,16 +40,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { tokens, token, title, body } = req.body;
       
       // Hỗ trợ thông minh: Nhận mảng 'tokens' (từ Frontend mới) hoặc chuỗi 'token' (dự phòng)
-      let targetTokens: string[] = [];
+      let rawTokens: string[] = [];
       if (Array.isArray(tokens) && tokens.length > 0) {
-        targetTokens = tokens;
+        rawTokens = tokens;
       } else if (typeof token === 'string' && token.trim() !== '') {
-        targetTokens = [token];
+        rawTokens = [token];
       }
+
+      // --- BỔ SUNG: LỌC TRÙNG LẶP TOKENS TUYỆT ĐỐI ---
+      const targetTokens = Array.from(new Set(rawTokens.filter(t => t && t.trim() !== '')));
 
       if (targetTokens.length === 0) {
          return res.status(400).json({ error: 'Thiếu token thiết bị' });
       }
+
+      // --- BỔ SUNG: LOG GIÁM SÁT TRÊN VERCEL ---
+      console.log(`[LOG] Gửi thông báo tới ${targetTokens.length} thiết bị.`);
+      console.log(`[LOG] Danh sách tokens:`, targetTokens);
 
       // ĐÂY LÀ ĐOẠN CODE ĐÃ ĐƯỢC NÂNG CẤP ĐỂ GỬI MẢNG TOKENS
       const message = {
@@ -57,7 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           title,
           body,
         },
-        tokens: targetTokens, // Gửi nguyên mảng thay vì 1 token lẻ
+        tokens: targetTokens, // Gửi nguyên mảng đã lọc trùng
         // Giữ nguyên cấu hình cho iPhone (iOS) của thầy
         apns: {
           payload: {
@@ -79,12 +86,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Sử dụng sendEachForMulticast thay cho send
       const response = await getMessaging().sendEachForMulticast(message);
       
+      // --- BỔ SUNG: LOG KẾT QUẢ ---
+      console.log(`[LOG] Kết quả gửi: Thành công ${response.successCount}, Thất bại ${response.failureCount}`);
+      
       return res.status(200).json({ success: true, response });
     } else {
       return res.status(405).json({ error: 'Chỉ chấp nhận method POST' });
     }
 
   } catch (error: any) {
+    console.error("[ERROR] Lỗi xử lý thông báo:", error);
     return res.status(500).json({
       error_type: "Lỗi hệ thống Firebase",
       exact_message: error.message
