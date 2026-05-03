@@ -5,6 +5,13 @@ import { cn } from '../../utils';
 import { User, Role } from '../../types';
 import * as XLSX from 'xlsx';
 
+// HÀM HỖ TRỢ: Tự động chuyển đổi dữ liệu cũ (1 nhóm) thành mảng (nhiều nhóm) an toàn
+const getUserDepts = (dept: string | string[] | undefined): string[] => {
+  if (!dept) return ['Chưa phân bổ'];
+  if (Array.isArray(dept)) return dept.length > 0 ? dept : ['Chưa phân bổ'];
+  return [dept];
+};
+
 const RoleOption = ({ active, onClick, label }: { active: boolean, onClick: () => void, label: string }) => (
   <button 
     type="button"
@@ -25,9 +32,16 @@ const UserForm = ({ initialUser, onBack, onSubmit, onDelete }: { initialUser?: U
   const [name, setName] = useState(initialUser?.name || '');
   const [email, setEmail] = useState(initialUser?.email || '');
   const [phone, setPhone] = useState(initialUser?.phone || '');
-  const [department, setDepartment] = useState(initialUser?.department || (contextDepartments.length > 0 ? contextDepartments[0] : 'Khác'));
+  
+  // NÂNG CẤP: Lưu nhiều nhóm (Mảng) thay vì 1 chuỗi
+  const [userDepts, setUserDepts] = useState<string[]>(getUserDepts(initialUser?.department));
+  
   const [role, setRole] = useState<Role>(initialUser?.role || 'teacher');
   const [grade, setGrade] = useState<string>(initialUser?.grade || (contextGrades.length > 0 ? contextGrades[0] : ''));
+
+  const toggleDept = (dept: string) => {
+    setUserDepts(prev => prev.includes(dept) ? prev.filter(d => d !== dept) : [...prev, dept]);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,7 +57,7 @@ const UserForm = ({ initialUser, onBack, onSubmit, onDelete }: { initialUser?: U
       name,
       email,
       phone,
-      department,
+      department: userDepts as any, // Gửi mảng lên Database
       role,
       grade
     });
@@ -98,20 +112,26 @@ const UserForm = ({ initialUser, onBack, onSubmit, onDelete }: { initialUser?: U
               />
             </div>
 
+            {/* NÂNG CẤP: Chuyển Select thành các nút chọn nhiều Nhóm */}
             <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Tổ chuyên môn</label>
-              <select 
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all font-medium shadow-inner"
-              >
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Tổ chuyên môn / Nhóm (Có thể chọn nhiều)</label>
+              <div className="flex flex-wrap gap-2">
                 {contextDepartments.map(dept => (
-                  <option key={dept} value={dept}>{dept}</option>
+                  <button
+                    key={dept}
+                    type="button"
+                    onClick={() => toggleDept(dept)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-full text-xs font-bold transition-all border",
+                      userDepts.includes(dept) 
+                        ? "bg-indigo-100 border-indigo-200 text-indigo-700 shadow-sm" 
+                        : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-white"
+                    )}
+                  >
+                    {dept}
+                  </button>
                 ))}
-                {!contextDepartments.includes(department) && department !== '' && (
-                  <option value={department}>{department} (Khác)</option>
-                )}
-              </select>
+              </div>
             </div>
 
             <div>
@@ -198,12 +218,16 @@ export const UsersView: React.FC = () => {
           if (!row || row.length < 1 || !row[0]) continue;
           
           const name = String(row[0]).trim();
-          const department = row[1] ? String(row[1]).trim() : 'Khác';
+          
+          // NÂNG CẤP: Import Excel hỗ trợ cách nhau dấu phẩy (VD: Toán, Liên tịch)
+          const deptStr = row[1] ? String(row[1]).trim() : 'Khác';
+          const departmentArr = deptStr.split(',').map(s => s.trim()).filter(Boolean);
+          
           const grade = row[2] ? String(row[2]).trim() : '';
 
           addUser({
             name,
-            department,
+            department: departmentArr.length > 0 ? departmentArr : ['Khác'],
             role: 'teacher',
             grade,
           } as any);
@@ -221,15 +245,21 @@ export const UsersView: React.FC = () => {
 
   const handleDownloadTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([
-      ['Họ và tên', 'Tổ', 'Khối giảng dạy'],
+      ['Họ và tên', 'Tổ (Nhiều tổ cách nhau dấu phẩy)', 'Khối giảng dạy'],
       ['Nguyễn Văn A', 'Toán', 'Khối 10'],
-      ['Trần Thị B', 'Văn', 'Khối 11']
+      ['Trần Thị B', 'Văn, Liên tịch', 'Khối 11']
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'DanhSachNhanSu');
     XLSX.writeFile(wb, 'Mau_DanhSachNhanSu.xlsx');
   };
   
+  // Tập hợp tất cả các Tổ/Nhóm Độc nhất từ Context và từ danh sách User hiện tại
+  const allUniqueDepts = Array.from(new Set([
+    ...departments,
+    ...users.filter(u => u.status === 'approved').flatMap(u => getUserDepts(u.department))
+  ])).sort();
+
   if (isAddingUser || editingUser) {
     return (
       <UserForm 
@@ -310,8 +340,8 @@ export const UsersView: React.FC = () => {
               onChange={e => setFilterDept(e.target.value)}
               className="bg-slate-50 border border-slate-200 text-sm rounded-xl px-3 py-2 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 font-medium text-slate-600"
             >
-              <option value="all">Tất cả các Tổ</option>
-              {Array.from(new Set([...departments, ...users.filter(u => u.status === 'approved').map(u => u.department || 'Chưa phân bổ')])).map(d => <option key={d} value={d}>Tổ {d}</option>)}
+              <option value="all">Tất cả các Tổ/Nhóm</option>
+              {allUniqueDepts.map(d => <option key={d} value={d}>Tổ/Nhóm {d}</option>)}
             </select>
           </div>
         </div>
@@ -341,7 +371,7 @@ export const UsersView: React.FC = () => {
                       </div>
                       <div className="min-w-0">
                         <div className="font-bold text-sm text-amber-900 truncate">{user.name}</div>
-                        <div className="text-[11px] text-amber-700 mt-0.5 truncate">{user.email}</div>
+                        <div className="text-[11px] text-amber-700 mt-0.5 truncate">{user.email} • {getUserDepts(user.department).join(', ')}</div>
                       </div>
                     </div>
                     <div className="flex gap-2 items-center">
@@ -365,12 +395,12 @@ export const UsersView: React.FC = () => {
           </div>
         )}
 
-        {Array.from(new Set([...departments, ...users.filter(u => u.status === 'approved').map(u => u.department || 'Chưa phân bổ')])).map(dept => {
+        {allUniqueDepts.map(dept => {
           if (filterDept !== 'all' && dept !== filterDept) return null;
           
           const deptUsers = users.filter(u => {
-            const userDept = u.department || 'Chưa phân bổ';
-            if (userDept !== dept) return false;
+            const uDepts = getUserDepts(u.department);
+            if (!uDepts.includes(dept)) return false;
             if (u.status !== 'approved') return false;
             if (searchQuery) {
                const q = searchQuery.toLowerCase();
@@ -387,7 +417,7 @@ export const UsersView: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
                     <BookOpen className="w-4 h-4 text-indigo-500" />
-                    {dept === 'BGH' ? 'Ban Giám Hiệu' : `Tổ ${dept}`}
+                    {dept === 'BGH' ? 'Ban Giám Hiệu' : `Nhóm/Tổ ${dept}`}
                   </h3>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white text-slate-500 shadow-sm border border-slate-200">
                     {deptUsers.length} TV
