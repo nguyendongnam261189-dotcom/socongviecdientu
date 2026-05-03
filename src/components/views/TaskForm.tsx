@@ -257,7 +257,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
           },
           body: JSON.stringify({
             tokens: uniqueTokens, // <--- GỬI MẢNG Ở ĐÂY
-            title: initialTask ? `Đã cập nhật: ${title}` : `Công việc mới: ${title}`,
+            title: initialTask ? `Đã cập nhật: ${title}` : `Test cuoi cung: ${title}`,
             body: description || 'Bạn có một công việc/thông báo mới trên hệ thống.'
           })
         }).catch(err => console.error("Lỗi gửi notify:", err));
