@@ -668,15 +668,9 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                         className="w-full text-[11px] bg-transparent border-b border-slate-300 px-1 py-1 outline-none focus:border-indigo-400 text-indigo-600 placeholder:text-slate-400"
                         placeholder="Link Google Drive, Website hoặc URL tài liệu..."
                       />
-                      <select
-                        value={att.category}
-                        onChange={e => handleAttachmentChange(idx, 'category', e.target.value)}
-                        className="w-full text-xs font-semibold bg-white border border-slate-200 text-slate-700 px-2 py-1.5 rounded-lg outline-none"
-                      >
-                        {documentCategories.map(cat => (
-                          <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                      </select>
+                     <div className="w-full text-xs font-semibold bg-emerald-50 border border-emerald-100 text-emerald-700 px-2 py-1.5 rounded-lg flex items-center">
+  Phân loại: {att.category}
+</div>
                     </div>
                     <button type="button" onClick={() => handleRemoveAttachment(idx)} className="p-2 text-slate-400 hover:text-rose-500 rounded-lg transition-colors">
                       <Trash2 className="w-5 h-5" />
