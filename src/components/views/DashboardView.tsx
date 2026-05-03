@@ -54,15 +54,63 @@ export const DashboardView: React.FC = () => {
     return { ...t, doneUids, isFullyDone: t.status === 'done' || (doneUids.length > 0 && doneUids.length === (t.assignedTo?.length || 0)) };
   }).filter(t => t.doneUids.length > 0 || t.status === 'done');
 
-  const handleRemind = (e: React.MouseEvent, uid: string) => {
+  // --- HÀM 1: CÁI CHUÔNG (NHẮC RIÊNG TỪNG NGƯỜI) ---
+  const handleRemind = async (e: React.MouseEvent, uid: string, taskTitle: string) => {
     e.stopPropagation();
     const user = users.find(u => u.id === uid);
-    showToast(`Đã gửi nhắc nhở đến ${user?.name || 'nhân sự'}`);
+    if (!user?.fcmTokens || user.fcmTokens.length === 0) {
+      alert(`Giáo viên ${user?.name || ''} chưa bật thông báo!`);
+      return;
+    }
+    try {
+      showToast(`Đang gửi nhắc nhở đến ${user.name}...`);
+      await fetch('/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tokens: user.fcmTokens,
+          title: '🔔 Nhắc nhở công việc',
+          body: `Công việc "${taskTitle}" đang chờ bạn xử lý!`
+        })
+      });
+      showToast(`Đã nhắc nhở ${user.name} thành công!`);
+    } catch (err) {
+      console.error(err);
+      showToast("Lỗi gửi thông báo");
+    }
   };
 
-  const handleToggleUrgent = (e: React.MouseEvent, taskId: string) => {
+  // --- HÀM 2: TIA SÉT (BẬT KHUNG ĐỎ + NHẮC TOÀN BỘ NGƯỜI CHƯA XONG) ---
+  const handleToggleUrgent = async (e: React.MouseEvent, task: any) => {
     e.stopPropagation();
-    toggleTaskUrgent(taskId);
+    toggleTaskUrgent(task.id);
+    
+    // Nếu task đang bình thường -> bật Khẩn cấp (khung đỏ), thì gom Token báo động
+    if (!task.isUrgent) {
+      const tokens: string[] = [];
+      task.pendingUids.forEach((uid: string) => {
+        const u = users.find(user => user.id === uid);
+        if (u?.fcmTokens) tokens.push(...u.fcmTokens);
+      });
+
+      if (tokens.length > 0) {
+        try {
+          await fetch('/api/notify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tokens,
+              title: '⚡ THÔNG BÁO KHẨN CẤP',
+              body: `Công việc "${task.title}" vừa được đánh dấu RẤT GẤP! Đề nghị hoàn thành ngay!`
+            })
+          });
+          showToast(`Đã bật khẩn cấp và báo động cho ${task.pendingUids.length} người!`);
+          return; // Thoát ra để không hiện Toast mặc định bên dưới nữa
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    }
     showToast(`Đã thay đổi trạng thái khẩn cấp`);
   };
 
@@ -189,7 +237,7 @@ export const DashboardView: React.FC = () => {
                   <div className="flex justify-between items-start mb-2">
                      <h4 className="font-bold text-sm text-slate-800 pr-2 line-clamp-2">{task.title}</h4>
                      <button
-                        onClick={(e) => handleToggleUrgent(e, task.id)}
+                        onClick={(e) => handleToggleUrgent(e, task)}
                         className={cn(
                            "p-1.5 rounded-md flex-shrink-0 transition-colors z-10",
                            task.isUrgent ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-400 hover:bg-slate-200"
@@ -221,7 +269,7 @@ export const DashboardView: React.FC = () => {
                                     <span className="text-[9px] text-slate-500">{user.department}</span>
                                  </div>
                                  <button 
-                                    onClick={(e) => handleRemind(e, uid)}
+                                    onClick={(e) => handleRemind(e, uid, task.title)}
                                     className="p-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-md transition-colors z-10"
                                     title="Nhắc nhở"
                                  >
@@ -294,4 +342,3 @@ export const DashboardView: React.FC = () => {
     </div>
   );
 };
-
