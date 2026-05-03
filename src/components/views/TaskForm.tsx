@@ -4,6 +4,17 @@ import { ChevronLeft, Plus, Trash2, ChevronDown, ChevronRight, FileSpreadsheet, 
 import { cn } from '../../utils';
 import { TaskCategory, Role, Task } from '../../types';
 
+// Hàm làm sạch tên Folder (Biến Tiếng Việt có dấu thành không dấu, thay khoảng trắng bằng dấu gạch dưới)
+const sanitizeFolderName = (str: string) => {
+  if (!str) return 'Khac';
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // Bỏ dấu
+    .replace(/đ/g, "d").replace(/Đ/g, "D") // Đổi chữ đ
+    .replace(/\s+/g, '_') // Thay khoảng trắng bằng dấu _
+    .replace(/[^a-zA-Z0-9_]/g, ''); // Loại bỏ các ký tự đặc biệt
+};
+
 interface TaskFormProps {
   onBack: () => void;
   initialTask?: Task;
@@ -55,6 +66,9 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
   const [attachments, setAttachments] = useState<{ title: string; url: string; category?: string }[]>(initialTask?.attachments || []);
   const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
   const [isUploading, setIsUploading] = useState(false);
+  
+  // State mới: Lưu trữ danh mục người dùng chọn TRƯỚC KHI bấm tải file
+  const [uploadCategory, setUploadCategory] = useState<string>(documentCategories[0] || 'Khác');
 
   const handleAddAttachment = () => {
     setAttachments(prev => [...prev, { title: '', url: '', category: documentCategories[0] || 'Khác' }]);
@@ -80,7 +94,14 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
         setUploadProgress(prev => ({ ...prev, [fileName]: 50 }));
         
         try {
-          const folderPath = `QuanLyTruongHoc/${new Date().getFullYear()}/Thang_${new Date().getMonth() + 1}/${category === 'task' ? 'CongViec' : category === 'announcement' ? 'ThongBao' : category === 'poll' ? 'KhaoSat' : 'Khac'}`;
+          // XỬ LÝ ĐƯỜNG DẪN THÔNG MINH CHO GOOGLE DRIVE TẠI ĐÂY
+          const safeGroupName = sanitizeFolderName(uploadCategory);
+          const currentYear = new Date().getFullYear();
+          const currentMonth = new Date().getMonth() + 1;
+          const formattedMonth = currentMonth < 10 ? `0${currentMonth}` : currentMonth.toString();
+          
+          // Tạo đường dẫn chuẩn: QuanLyTruongHoc / Nam_2026 / Cong_van / Thang_05
+          const folderPath = `QuanLyTruongHoc/Nam_${currentYear}/${safeGroupName}/Thang_${formattedMonth}`;
           
           const response = await fetch(gasUrl, {
             method: 'POST',
@@ -97,7 +118,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
 
           const result = await response.json();
           if (result.url) {
-            setAttachments(prev => [...prev, { title: file.name, url: result.url, category: documentCategories[0] || 'Khác' }]);
+            // Khi thành công, tự động gán luôn uploadCategory vào file
+            setAttachments(prev => [...prev, { title: file.name, url: result.url, category: uploadCategory }]);
           } else {
             throw new Error(result.error || 'Server không trả về URL');
           }
@@ -231,12 +253,11 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
       showToast('Tạo thành công!');
     }
     
-    // 2. Kích hoạt gửi thông báo (ĐÃ SỬA: Gửi 1 lần với mảng)
+    // 2. Kích hoạt gửi thông báo
     try {
       const targetedUsers = users.filter(u => assignedTo.includes(u.id));
       const validTokens: string[] = [];
 
-      // Lấy toàn bộ token của những người được giao
       targetedUsers.forEach((u: any) => {
         if (u.fcmTokens && Array.isArray(u.fcmTokens)) {
           validTokens.push(...u.fcmTokens);
@@ -245,10 +266,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
         }
       });
 
-      // Lọc bỏ trùng lặp và rỗng
       const uniqueTokens = Array.from(new Set(validTokens)).filter(t => t);
 
-      // GỌI API ĐÚNG 1 LẦN NẾU CÓ TOKEN
       if (uniqueTokens.length > 0) {
         fetch('/api/notify', {
           method: 'POST',
@@ -256,7 +275,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            tokens: uniqueTokens, // <--- GỬI MẢNG Ở ĐÂY
+            tokens: uniqueTokens,
             title: initialTask ? `Đã cập nhật: ${title}` : `Công việc mới: ${title}`,
             body: description || 'Bạn có một công việc/thông báo mới trên hệ thống.'
           })
@@ -673,12 +692,27 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                 </div>
               ))}
 
-              <div className="flex gap-2">
-                <label className={`w-full flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed border-slate-300 text-sm font-bold transition-colors ${isUploading ? 'text-slate-400 cursor-not-allowed bg-slate-50' : 'text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 cursor-pointer'}`}>
-                  <Upload className="w-4 h-4" /> {isUploading ? 'Đang tải...' : 'Tải tài liệu lên'}
-                  <input type="file" className="hidden" multiple onChange={handleFileUpload} disabled={isUploading} />
-                </label>
+              {/* KHU VỰC UPLOAD FILE ĐÃ ĐƯỢC CẢI TIẾN */}
+              <div className="flex flex-col gap-2 mt-4 pt-3 border-t border-slate-100">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">CHỌN NHÓM TRƯỚC KHI TẢI LÊN</label>
+                <div className="flex gap-2">
+                  <select
+                    value={uploadCategory}
+                    onChange={e => setUploadCategory(e.target.value)}
+                    className="flex-1 text-sm font-semibold bg-slate-50 border border-slate-200 text-slate-700 px-3 py-2 rounded-xl outline-none focus:border-indigo-400 focus:bg-white transition-colors"
+                  >
+                    {documentCategories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                  
+                  <label className={`flex-[1.5] flex items-center justify-center gap-2 p-2 rounded-xl border border-dashed border-slate-300 text-sm font-bold transition-colors ${isUploading ? 'text-slate-400 cursor-not-allowed bg-slate-50' : 'text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 cursor-pointer'}`}>
+                    <Upload className="w-4 h-4" /> {isUploading ? 'Đang tải...' : 'Tải lên Drive'}
+                    <input type="file" className="hidden" multiple onChange={handleFileUpload} disabled={isUploading} />
+                  </label>
+                </div>
               </div>
+
           </div>
 
           <div className="pt-4 pb-12">
