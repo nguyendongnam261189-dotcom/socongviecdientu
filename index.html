@@ -17,7 +17,6 @@
     
     <script>
       window.addEventListener('error', function(e) {
-        // Phát hiện lỗi kẹt cache file giao diện cũ khi Vercel cập nhật bản mới
         if (
           e.message && 
           (e.message.includes('Loading chunk') || 
@@ -25,7 +24,6 @@
            e.message.includes('Unexpected token'))
         ) {
           console.warn('Phát hiện bản cập nhật mới bị kẹt cache. Đang tự động tải lại...');
-          // Ép trình duyệt làm mới trang ngay lập tức để lấy bản code mới nhất
           window.location.reload(true);
         }
       }, true);
