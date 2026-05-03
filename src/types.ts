@@ -6,7 +6,8 @@ export interface User {
   email: string;
   name: string;
   role: Role;
-  department: string;
+  // ĐÃ CẬP NHẬT: Cho phép lưu nhiều nhóm (string[]) hoặc 1 nhóm (string) để tương thích ngược
+  department: string | string[]; 
   grade: string; // single grade for simplicity as per spec
   status: UserStatus;
   avatar?: string;
@@ -92,4 +93,3 @@ export interface Document {
 }
 
 export type TabType = 'dashboard' | 'users' | 'tasks' | 'notifications' | 'documents' | 'settings' | 'statistics';
-
