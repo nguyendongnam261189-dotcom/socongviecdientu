@@ -4,7 +4,7 @@ import { PieChart, TrendingUp, AlertCircle, FileText, CheckCircle2, Plus, Users 
 import { format, isPast, parseISO } from 'date-fns';
 import { TaskForm } from './TaskForm';
 import { TaskDetail } from './TaskDetail';
-import { cn, isTaskVisible } from '../../utils';
+import { cn, isTaskVisible, getUserDepts } from '../../utils'; // ĐÃ IMPORT THÊM getUserDepts
 
 export const DashboardView: React.FC = () => {
   const { tasks: allTasks, users, currentUser, setActiveTab, showToast, toggleTaskUrgent } = useAppContext();
@@ -25,11 +25,15 @@ export const DashboardView: React.FC = () => {
 
   const overdueTasks = tasks.filter(t => t.deadline && t.status !== 'done' && isPast(parseISO(t.deadline)));
 
-  // Thống kê theo tổ (Department stats)
-  const departments = Array.from(new Set(users.map(u => u.department).filter(Boolean))).filter(d => d !== 'BGH');
+  // NÂNG CẤP: Thống kê theo tổ (Hỗ trợ đa nhóm/tổ)
+  // 1. Lấy tất cả các tổ/nhóm đang có thật trong hệ thống từ danh sách người dùng
+  const allDeptsInUse = users.flatMap(u => getUserDepts(u.department));
+  const departments = Array.from(new Set(allDeptsInUse)).filter(d => d !== 'BGH' && d !== 'Chưa phân bổ');
   
   const deptStats = departments.map(dept => {
-    const deptUsers = users.filter(u => u.department === dept).map(u => u.id);
+    // 2. Tìm tất cả những người thuộc tổ này (Dù họ có kiêm nhiệm tổ khác)
+    const deptUsers = users.filter(u => getUserDepts(u.department).includes(dept)).map(u => u.id);
+    
     const deptTasks = tasks.filter(t => t.assignedTo?.some(uid => deptUsers.includes(uid)));
     const deptDone = deptTasks.filter(t => {
       if (t.status === 'done') return true;
@@ -105,7 +109,7 @@ export const DashboardView: React.FC = () => {
             })
           });
           showToast(`Đã bật khẩn cấp và báo động cho ${task.pendingUids.length} người!`);
-          return; // Thoát ra để không hiện Toast mặc định bên dưới nữa
+          return;
         } catch (err) {
           console.error(err);
         }
@@ -167,33 +171,37 @@ export const DashboardView: React.FC = () => {
       {/* Thống kê theo tổ */}
       <div>
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 ml-1 flex items-center gap-1.5">
-          <PieChart className="w-4 h-4" /> Thống kê theo tổ chuyên môn
+          <PieChart className="w-4 h-4" /> Thống kê theo tổ chuyên môn / Nhóm
         </h3>
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          {deptStats.map((dept, idx) => (
-            <div key={dept.name} className={`p-4 ${idx !== deptStats.length - 1 ? 'border-b border-slate-100' : ''}`}>
-              <div className="flex justify-between items-center mb-2">
-                <span className="font-bold text-sm text-slate-700">Tổ {dept.name}</span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
-                  {dept.done}/{dept.total} Hoàn thành
-                </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden shadow-inner">
-                  <div 
-                    className={`h-full rounded-full transition-all duration-500 ${dept.rate >= 80 ? 'bg-emerald-500' : dept.rate >= 50 ? 'bg-amber-400' : 'bg-rose-500'}`} 
-                    style={{ width: `${dept.rate}%` }}
-                  ></div>
+          {deptStats.length === 0 ? (
+             <div className="p-6 text-center text-slate-400 text-xs">Chưa có dữ liệu thống kê tổ/nhóm.</div>
+          ) : (
+            deptStats.map((dept, idx) => (
+              <div key={dept.name} className={`p-4 ${idx !== deptStats.length - 1 ? 'border-b border-slate-100' : ''}`}>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="font-bold text-sm text-slate-700">{dept.name}</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                    {dept.done}/{dept.total} Hoàn thành
+                  </span>
                 </div>
-                <span className="text-xs font-black text-slate-700 w-8 text-right">{dept.rate}%</span>
-              </div>
-              {dept.overdue > 0 && (
-                <div className="mt-2 text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-1 rounded inline-block">
-                  {dept.overdue} việc trễ hạn
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden shadow-inner">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-500 ${dept.rate >= 80 ? 'bg-emerald-500' : dept.rate >= 50 ? 'bg-amber-400' : 'bg-rose-500'}`} 
+                      style={{ width: `${dept.rate}%` }}
+                    ></div>
+                  </div>
+                  <span className="text-xs font-black text-slate-700 w-8 text-right">{dept.rate}%</span>
                 </div>
-              )}
-            </div>
-          ))}
+                {dept.overdue > 0 && (
+                  <div className="mt-2 text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-1 rounded inline-block">
+                    {dept.overdue} việc trễ hạn
+                  </div>
+                )}
+              </div>
+            ))
+          )}
         </div>
       </div>
       
@@ -266,11 +274,11 @@ export const DashboardView: React.FC = () => {
                               <div key={uid} className="flex justify-between items-center bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-100">
                                  <div className="flex flex-col">
                                     <span className="text-xs font-bold text-slate-700">{user.name}</span>
-                                    <span className="text-[9px] text-slate-500">{user.department}</span>
+                                    <span className="text-[9px] text-slate-500 line-clamp-1">{getUserDepts(user.department).join(', ')}</span>
                                  </div>
                                  <button 
                                     onClick={(e) => handleRemind(e, uid, task.title)}
-                                    className="p-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-md transition-colors z-10"
+                                    className="p-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-md transition-colors z-10 shrink-0 ml-2"
                                     title="Nhắc nhở"
                                  >
                                     <Bell className="w-3.5 h-3.5" />
@@ -316,9 +324,9 @@ export const DashboardView: React.FC = () => {
                               <div key={uid} className="flex justify-between items-center bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-100">
                                  <div className="flex flex-col">
                                     <span className="text-xs font-bold text-slate-700">{user.name}</span>
-                                    <span className="text-[9px] text-slate-500">{user.department}</span>
+                                    <span className="text-[9px] text-slate-500 line-clamp-1">{getUserDepts(user.department).join(', ')}</span>
                                  </div>
-                                 <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                                 <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 ml-2" />
                               </div>
                            )
                         })}
