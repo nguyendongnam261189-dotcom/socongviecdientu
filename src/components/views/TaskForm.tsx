@@ -15,6 +15,13 @@ const sanitizeFolderName = (str: string) => {
     .replace(/[^a-zA-Z0-9_]/g, ''); // Loại bỏ các ký tự đặc biệt
 };
 
+// HÀM HỖ TRỢ: Xử lý tương thích dữ liệu Tổ/Nhóm cũ và mới
+const getUserDepts = (dept: string | string[] | undefined): string[] => {
+  if (!dept) return ['Chưa phân bổ'];
+  if (Array.isArray(dept)) return dept.length > 0 ? dept : ['Chưa phân bổ'];
+  return [dept];
+};
+
 interface TaskFormProps {
   onBack: () => void;
   initialTask?: Task;
@@ -181,8 +188,10 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
       return selectedUsers;
     }
     return users.filter(u => {
+      const uDepts = getUserDepts(u.department); // Lấy danh sách các tổ của User
       const matchRole = selectedRoles.length === 0 || selectedRoles.includes(u.role);
-      const matchDept = selectedDepartments.length === 0 || selectedDepartments.includes(u.department);
+      // NÂNG CẤP: Kiểm tra xem User có thuộc ít nhất 1 tổ trong số các tổ được chọn không
+      const matchDept = selectedDepartments.length === 0 || uDepts.some(d => selectedDepartments.includes(d));
       const matchGrade = selectedGrades.length === 0 || selectedGrades.includes(u.grade);
       return matchRole && matchDept && matchGrade;
     }).map(u => u.id);
@@ -616,7 +625,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                  <div className="max-h-[300px] overflow-y-auto space-y-1 border border-slate-200 rounded-xl p-2 bg-slate-50">
                    {users.filter(u => 
                      u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) || 
-                     u.department.toLowerCase().includes(userSearchQuery.toLowerCase())
+                     getUserDepts(u.department).some(d => d.toLowerCase().includes(userSearchQuery.toLowerCase()))
                    ).map(u => (
                      <label key={u.id} className="flex items-center gap-3 p-3 bg-white rounded-lg cursor-pointer border border-transparent hover:border-slate-200 transition-colors shadow-sm">
                        <input 
@@ -627,13 +636,13 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                        />
                        <div className="flex-1 min-w-0">
                          <div className="text-sm font-medium text-slate-800 truncate">{u.name}</div>
-                         <div className="text-[11px] text-slate-500 truncate">{u.department} • {u.grade || 'Chưa phân công'}</div>
+                         <div className="text-[11px] text-slate-500 truncate">{getUserDepts(u.department).join(', ')} • {u.grade || 'Chưa phân công'}</div>
                        </div>
                      </label>
                    ))}
                    {users.filter(u => 
                      u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) || 
-                     u.department.toLowerCase().includes(userSearchQuery.toLowerCase())
+                     getUserDepts(u.department).some(d => d.toLowerCase().includes(userSearchQuery.toLowerCase()))
                    ).length === 0 && (
                      <div className="text-center text-slate-400 text-sm py-6">
                        Không có kết quả.
