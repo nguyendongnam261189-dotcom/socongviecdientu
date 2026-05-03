@@ -17,7 +17,7 @@
     
     <script>
       window.addEventListener('error', function(e) {
-        // Nếu lỗi là do không tìm thấy file giao diện (JS/CSS) cũ do kẹt cache
+        // Phát hiện lỗi kẹt cache file giao diện cũ khi Vercel cập nhật bản mới
         if (
           e.message && 
           (e.message.includes('Loading chunk') || 
@@ -25,7 +25,7 @@
            e.message.includes('Unexpected token'))
         ) {
           console.warn('Phát hiện bản cập nhật mới bị kẹt cache. Đang tự động tải lại...');
-          // Ép trình duyệt tải lại trang ngay lập tức để lấy bản code mới nhất
+          // Ép trình duyệt làm mới trang ngay lập tức để lấy bản code mới nhất
           window.location.reload(true);
         }
       }, true);
