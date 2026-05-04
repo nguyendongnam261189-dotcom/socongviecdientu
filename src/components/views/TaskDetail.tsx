@@ -56,12 +56,13 @@ const FilePreview: React.FC<{ title: string, url: string }> = ({ title, url }) =
 
       {isOpen && (
         <div 
-          className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-4 bg-slate-900/90 backdrop-blur-md animate-in fade-in duration-200"
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-slate-900/95 backdrop-blur-md animate-in fade-in duration-200"
           style={{ pointerEvents: 'auto' }}
           onClick={(e) => { e.stopPropagation(); setIsOpen(false); }}
         >
+          {/* CỐ ĐỊNH CHIỀU CAO: Thay vì dùng h-full, sử dụng h-[85dvh] để không bao giờ bị trình duyệt che khuất trên mobile */}
           <div 
-            className="bg-white w-full max-w-4xl h-full max-h-[90dvh] md:h-[90vh] rounded-2xl flex flex-col shadow-2xl overflow-hidden relative"
+            className="bg-white w-full max-w-4xl h-[85dvh] rounded-2xl flex flex-col shadow-2xl overflow-hidden relative"
             onClick={(e) => e.stopPropagation()} 
           >
             <div className="flex items-center justify-between p-3 sm:p-4 border-b border-slate-100 bg-white shrink-0">
