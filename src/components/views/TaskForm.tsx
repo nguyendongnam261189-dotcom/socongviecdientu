@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { ChevronLeft, Plus, Trash2, ChevronDown, ChevronRight, FileSpreadsheet, Upload, Search } from 'lucide-react';
-import { cn } from '../../utils';
+import { cn, getUserGrades } from '../../utils';
 import { TaskCategory, Role, Task } from '../../types';
 
 // Hàm làm sạch tên Folder (Biến Tiếng Việt có dấu thành không dấu, thay khoảng trắng bằng dấu gạch dưới)
@@ -35,7 +35,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
   const [targetType, setTargetType] = useState<'all' | 'specific' | 'individual'>(() => {
     if (initialTask) {
        if (initialTask.assignedTo.length > 0 && initialTask.assignedTo.length < users.length) {
-         if (initialTask.targetRoles?.length || initialTask.targetDepartments?.length || initialTask.targetGrades?.length || initialTask.targetGroups?.length) {
+         if (initialTask.targetRoles?.length || initialTask.targetDepartments?.length || initialTask.targetGrades?.length) {
             return 'specific';
          }
          if (initialTask.assignedTo.length > 0) return 'individual';
@@ -48,8 +48,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
   
   const [selectedRoles, setSelectedRoles] = useState<Role[]>((initialTask?.targetRoles as Role[]) || []);
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>(initialTask?.targetDepartments || []);
-  const [selectedGroups, setSelectedGroups] = useState<string[]>(initialTask?.targetGroups || []); // NÂNG CẤP: Lưu bộ lọc nhóm kiêm nhiệm
-  const [selectedGrades, setSelectedGrades] = useState<string[]>(initialTask?.targetGrades || []);
+  const [selectedGrades, setSelectedGrades] = useState<string[]>(initialTask?.targetGrades || []); // ĐÃ HỢP NHẤT: Khối + Nhóm kiêm nhiệm
   const [selectedUsers, setSelectedUsers] = useState<string[]>(initialTask?.assignedTo || []);
   const [userSearchQuery, setUserSearchQuery] = useState('');
   
@@ -71,8 +70,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
   // State mới: Lưu trữ danh mục người dùng chọn TRƯỚC KHI bấm tải file
   const [uploadCategory, setUploadCategory] = useState<string>(documentCategories[0] || 'Khác');
 
-  // Lấy ra tất cả các nhóm kiêm nhiệm hiện có trong hệ thống
-  const allSystemGroups = Array.from(new Set(users.flatMap(u => u.groups || []))).filter(Boolean).sort();
+  // Lấy ra tất cả các Khối / Nhóm kiêm nhiệm hiện có trong hệ thống
+  const allSystemGrades = Array.from(new Set([...contextGrades, ...users.flatMap(u => getUserGrades(u.grade))])).filter(Boolean).sort();
 
   const handleAddAttachment = () => {
     setAttachments(prev => [...prev, { title: '', url: '', category: documentCategories[0] || 'Khác' }]);
@@ -185,12 +184,12 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
       return selectedUsers;
     }
     return users.filter(u => {
+      const uGrades = getUserGrades(u.grade); // Lấy mảng Khối/Nhóm
       const matchRole = selectedRoles.length === 0 || selectedRoles.includes(u.role);
       const matchDept = selectedDepartments.length === 0 || selectedDepartments.includes(u.department || '');
-      // NÂNG CẤP: Kiểm tra xem User có thuộc ít nhất 1 nhóm trong số các nhóm được chọn không
-      const matchGroup = selectedGroups.length === 0 || (u.groups && u.groups.some(g => selectedGroups.includes(g)));
-      const matchGrade = selectedGrades.length === 0 || selectedGrades.includes(u.grade);
-      return matchRole && matchDept && matchGroup && matchGrade;
+      // Kiểm tra xem User có nằm trong Khối/Nhóm nào được tick chọn không
+      const matchGrade = selectedGrades.length === 0 || selectedGrades.some(g => uGrades.includes(g));
+      return matchRole && matchDept && matchGrade;
     }).map(u => u.id);
   };
 
@@ -225,12 +224,10 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
     if (targetType === 'specific') {
       newTaskParams.targetRoles = selectedRoles;
       newTaskParams.targetDepartments = selectedDepartments;
-      newTaskParams.targetGroups = selectedGroups; // LƯU VÀO DATABASE
       newTaskParams.targetGrades = selectedGrades;
     } else {
       newTaskParams.targetRoles = [];
       newTaskParams.targetDepartments = [];
-      newTaskParams.targetGroups = [];
       newTaskParams.targetGrades = [];
     }
     
@@ -297,7 +294,6 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
   };
 
   const uniqueDepartments = contextDepartments;
-  const uniqueGrades = contextGrades;
 
   const categories: { value: TaskCategory, label: string }[] = [
     { value: 'task', label: 'Công Việc' },
@@ -586,29 +582,12 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                      ))}
                    </div>
                  </div>
-                 {/* NÂNG CẤP: Lọc theo Nhóm kiêm nhiệm */}
-                 {allSystemGroups.length > 0 && (
-                   <div>
-                     <span className="text-[11px] font-bold text-slate-400 uppercase mb-2 block">Theo nhóm kiêm nhiệm</span>
-                     <div className="flex flex-wrap gap-2">
-                       {allSystemGroups.map(group => (
-                         <button
-                           key={group}
-                           type="button"
-                           onClick={() => toggleArrayItem(selectedGroups, setSelectedGroups, group)}
-                           className={cn("px-3 py-1.5 rounded-full text-xs font-bold transition-all border", selectedGroups.includes(group) ? "bg-sky-100 border-sky-200 text-sky-700" : "bg-slate-50 text-slate-600")}
-                         >
-                           {group}
-                         </button>
-                       ))}
-                     </div>
-                   </div>
-                 )}
-                 {/* Grades */}
+                 
+                 {/* Khối / Nhóm kiêm nhiệm */}
                  <div>
-                   <span className="text-[11px] font-bold text-slate-400 uppercase mb-2 block">Theo khối</span>
+                   <span className="text-[11px] font-bold text-slate-400 uppercase mb-2 block">Theo khối / nhóm kiêm nhiệm</span>
                    <div className="flex flex-wrap gap-2">
-                     {uniqueGrades.map(grade => (
+                     {allSystemGrades.map(grade => (
                        <button
                          key={grade}
                          type="button"
@@ -640,11 +619,14 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                    />
                  </div>
                  <div className="max-h-[300px] overflow-y-auto space-y-1 border border-slate-200 rounded-xl p-2 bg-slate-50">
-                   {users.filter(u => 
-                     u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) || 
+                   {users.filter(u => {
+                     const uGrades = getUserGrades(u.grade);
+                     return u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) || 
                      (u.department && u.department.toLowerCase().includes(userSearchQuery.toLowerCase())) ||
-                     (u.groups && u.groups.some(g => g.toLowerCase().includes(userSearchQuery.toLowerCase())))
-                   ).map(u => (
+                     uGrades.some(g => g.toLowerCase().includes(userSearchQuery.toLowerCase()))
+                   }).map(u => {
+                     const uGrades = getUserGrades(u.grade);
+                     return (
                      <label key={u.id} className="flex items-center gap-3 p-3 bg-white rounded-lg cursor-pointer border border-transparent hover:border-slate-200 transition-colors shadow-sm">
                        <input 
                          type="checkbox" 
@@ -656,17 +638,19 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                          <div className="text-sm font-medium text-slate-800 truncate">{u.name}</div>
                          <div className="text-[11px] text-slate-500 truncate">
                            {u.department || 'Chưa phân bổ'}
-                           {u.groups && u.groups.length > 0 && <span className="text-indigo-500 font-medium"> • Nhóm: {u.groups.join(', ')}</span>}
-                           {' • ' + (u.grade || 'Chưa phân công')}
+                           <span className="text-emerald-600 font-medium">
+                             {' • ' + (uGrades.length > 0 ? uGrades.join(', ') : 'Chưa phân công')}
+                           </span>
                          </div>
                        </div>
                      </label>
-                   ))}
-                   {users.filter(u => 
-                     u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) || 
+                   )})}
+                   {users.filter(u => {
+                     const uGrades = getUserGrades(u.grade);
+                     return u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) || 
                      (u.department && u.department.toLowerCase().includes(userSearchQuery.toLowerCase())) ||
-                     (u.groups && u.groups.some(g => g.toLowerCase().includes(userSearchQuery.toLowerCase())))
-                   ).length === 0 && (
+                     uGrades.some(g => g.toLowerCase().includes(userSearchQuery.toLowerCase()))
+                   }).length === 0 && (
                      <div className="text-center text-slate-400 text-sm py-6">
                        Không có kết quả.
                      </div>
