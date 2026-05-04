@@ -22,7 +22,6 @@ interface TaskFormProps {
 export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
   const { users, currentUser, addTask, editTask, showToast, departments: contextDepartments, grades: contextGrades, documentCategories, gasUrl } = useAppContext();
   
-  // SỬA LỖI CACHE: Luôn lấy dữ liệu mới nhất của người đăng nhập từ cơ sở dữ liệu
   const freshCurrentUser = useMemo(() => {
     return users.find(u => u.id === currentUser?.id) || currentUser;
   }, [users, currentUser]);
@@ -32,7 +31,6 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
   const [description, setDescription] = useState(initialTask?.description || '');
   
   const [notifyAgain, setNotifyAgain] = useState(false);
-  const [visibility, setVisibility] = useState<'public' | 'private'>(initialTask?.visibility || 'public');
 
   const [targetType, setTargetType] = useState<'all' | 'specific' | 'individual'>(() => {
     if (initialTask) {
@@ -200,12 +198,10 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
     setArr(prev => prev.includes(item) ? prev.filter(i => i !== item) : [...prev, item]);
   };
 
-  // LOGIC ZALO: Gửi cho TẤT CẢ những ai thuộc CÁC NHÓM được chọn (Phép HOẶC)
   const rawAssignedUsers = useMemo(() => {
     if (targetType === 'all') return availableUsers; 
     if (targetType === 'individual') return users.filter(u => selectedUsers.includes(u.id));
     
-    // Nếu chọn Nhóm cụ thể mà chưa check ô nào -> Không gửi cho ai cả (Tránh lỗi gửi toàn trường)
     if (selectedRoles.length === 0 && selectedDepartments.length === 0 && selectedGrades.length === 0) return [];
 
     return users.filter(u => {
@@ -254,7 +250,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
       category,
       assignedTo: finalAssignedTo,
       excludedUsers: finalExcluded,
-      visibility: category === 'task' ? visibility : 'public',
+      visibility: 'private', // ÉP LUÔN LUÔN LÀ RIÊNG TƯ (CHỈ NGƯỜI NHẬN MỚI THẤY)
       createdBy: freshCurrentUser?.id || '',
       attachments: attachments.filter(a => a.title.trim() && a.url.trim()),
     };
@@ -502,24 +498,6 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
               </div>
               </>
             )}
-            
-             {category === 'task' && (
-               <div className="pt-2 border-t border-slate-100 mt-2">
-                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Quyền riêng tư (Quyền xem)</label>
-                 <p className="text-[11px] text-slate-400 mb-2 leading-relaxed">
-                   <b>Lưu ý:</b> Quyền riêng tư quyết định việc <b>MỌI NGƯỜI</b> có được thấy công việc này không. Còn thiết lập "Người nhận" ở bên dưới là chỉ định người <b>CHỊU TRÁCH NHIỆM</b> thực hiện.
-                 </p>
-                 <select
-                   value={visibility}
-                   onChange={e => setVisibility(e.target.value as 'public' | 'private')}
-                   className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm font-medium focus:ring-2 focus:ring-indigo-100 outline-none"
-                 >
-                   <option value="public">Công khai (Tất cả giáo viên đều có thể xem)</option>
-                   <option value="private">Riêng tư (Chỉ Admin và Người được giao mới có thể xem)</option>
-                 </select>
-               </div>
-            )}
-
           </div>
 
           {/* POLL FIELDS */}
