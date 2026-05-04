@@ -6,44 +6,47 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-// HÀM HỖ TRỢ DÙNG CHUNG: Đảm bảo lấy ra mảng Tổ/Nhóm an toàn từ User
-export const getUserDepts = (dept: string | string[] | undefined): string[] => {
-  if (!dept) return ['Chưa phân bổ'];
-  if (Array.isArray(dept)) return dept.length > 0 ? dept : ['Chưa phân bổ'];
-  return [dept];
-};
-
 export const isTaskVisible = (task: Task, currentUser: User | null, allUsers?: User[]): boolean => {
   if (!currentUser) return false;
   if (currentUser.role === 'admin') return true;
   if (task.createdBy === currentUser.id) return true;
   if (task.assignedTo?.includes(currentUser.id)) return true;
 
-  const userDepts = getUserDepts(currentUser.department);
-
   const matchRole = task.targetRoles?.includes(currentUser.role);
-  // NÂNG CẤP: Kiểm tra xem User có thuộc ít nhất 1 Tổ trong danh sách mục tiêu của Task hay không
-  const matchDept = task.targetDepartments?.some(targetDept => userDepts.includes(targetDept));
+  
+  // So sánh chuẩn: Tổ chuyên môn (Dùng string)
+  // Lớp bảo vệ: Nếu lỡ có user lưu department dạng mảng lúc test, ta lấy phần tử đầu tiên
+  const userDept = typeof currentUser.department === 'string' 
+    ? currentUser.department 
+    : (Array.isArray(currentUser.department) ? currentUser.department[0] : '');
+    
+  const matchDept = task.targetDepartments?.includes(userDept || '');
   const matchGrade = task.targetGrades?.includes(currentUser.grade || '');
+  
+  // KIỂM TRA MỚI: Người dùng có nằm trong Nhóm kiêm nhiệm nào mà Task nhắm tới không?
+  const matchGroup = task.targetGroups?.some(group => currentUser.groups?.includes(group));
 
-  return !!(matchRole || matchDept || matchGrade);
+  return !!(matchRole || matchDept || matchGrade || matchGroup);
 };
 
 export const canEditTask = (task: Task, currentUser: User | null, allUsers?: User[]): boolean => {
   if (!currentUser) return false;
   if (currentUser.role === 'admin') return true;
   
-  const userDepts = getUserDepts(currentUser.department);
+  const userDept = typeof currentUser.department === 'string' 
+    ? currentUser.department 
+    : (Array.isArray(currentUser.department) ? currentUser.department[0] : '');
 
-  if (currentUser.role === 'leader' && userDepts.length > 0) {
+  // Tổ trưởng có quyền sửa nếu người tạo cùng TỔ CHUYÊN MÔN
+  if (currentUser.role === 'leader' && userDept) {
     if (task.createdBy === currentUser.id) return true;
     if (allUsers) {
       const creator = allUsers.find(u => u.id === task.createdBy);
-      // NÂNG CẤP: Cho phép Tổ trưởng sửa task nếu người tạo task và Tổ trưởng có ít nhất 1 tổ chung
       if (creator) {
-        const creatorDepts = getUserDepts(creator.department);
-        const hasCommonDept = creatorDepts.some(dept => userDepts.includes(dept));
-        if (hasCommonDept) return true;
+        const creatorDept = typeof creator.department === 'string' 
+          ? creator.department 
+          : (Array.isArray(creator.department) ? creator.department[0] : '');
+        if (creatorDept === userDept) return true;
       }
     }
     return false;
@@ -56,17 +59,19 @@ export const canDeleteTask = (task: Task, currentUser: User | null, allUsers?: U
   if (!currentUser) return false;
   if (currentUser.role === 'admin') return true;
   
-  const userDepts = getUserDepts(currentUser.department);
+  const userDept = typeof currentUser.department === 'string' 
+    ? currentUser.department 
+    : (Array.isArray(currentUser.department) ? currentUser.department[0] : '');
 
-  if (currentUser.role === 'leader' && userDepts.length > 0) {
+  if (currentUser.role === 'leader' && userDept) {
     if (task.createdBy === currentUser.id) return true;
     if (allUsers) {
       const creator = allUsers.find(u => u.id === task.createdBy);
-      // NÂNG CẤP: Quyền xóa cũng áp dụng luật tương tự quyền sửa
       if (creator) {
-        const creatorDepts = getUserDepts(creator.department);
-        const hasCommonDept = creatorDepts.some(dept => userDepts.includes(dept));
-        if (hasCommonDept) return true;
+        const creatorDept = typeof creator.department === 'string' 
+          ? creator.department 
+          : (Array.isArray(creator.department) ? creator.department[0] : '');
+        if (creatorDept === userDept) return true;
       }
     }
     return false;
