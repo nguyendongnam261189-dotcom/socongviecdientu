@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { User, Task, Comment, Document, TabType, UserTaskStatus } from "../types";
+import { User, Task, Comment, Document, TabType, UserTaskStatus, PollOption } from "../types";
 import { auth, db, messaging } from "../firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getToken, onMessage } from "firebase/messaging";
@@ -59,6 +59,7 @@ interface AppContextType {
   toggleTaskUrgent: (taskId: string) => void;
   toggleCommentsLock: (taskId: string) => void;
   votePoll: (taskId: string, optionId: string | null) => void;
+  addPollOption: (taskId: string, optionText: string) => void; // THÊM MỚI
   toggleTaskLock: (taskId: string) => void;
   submitReport: (
     taskId: string,
@@ -647,6 +648,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  // HÀM MỚI: THÊM LỰA CHỌN KHẢO SÁT & TỰ ĐỘNG BẦU CHỌN
+  const addPollOption = async (taskId: string, optionText: string) => {
+    if (!currentUser || !optionText.trim()) return;
+    try {
+      const taskRef = doc(db, "tasks", taskId);
+      const taskSnap = await getDoc(taskRef);
+      if (taskSnap.exists()) {
+        const data = taskSnap.data() as Task;
+        if (data.category === "poll" && data.pollOptions) {
+          
+          // Kiểm tra xem lựa chọn đã tồn tại chưa (tránh trùng lặp)
+          const textLower = optionText.trim().toLowerCase();
+          if (data.pollOptions.some(opt => opt.text.trim().toLowerCase() === textLower)) {
+            showToast("Lựa chọn này đã tồn tại trong danh sách!");
+            return;
+          }
+
+          const newOptionId = `opt-user-${Date.now()}`;
+          const newOption: PollOption = {
+            id: newOptionId,
+            text: `${optionText.trim()} (Bởi: ${currentUser.name})`, // Gắn tag tên người thêm
+            votes: [currentUser.id] // Tự động bầu cho phương án mình vừa nghĩ ra
+          };
+
+          let newOptions = [...data.pollOptions];
+          
+          // Nếu khảo sát chỉ cho chọn 1 (không phải Multiple Choice), cần gỡ vote cũ của họ
+          if (!data.pollMultipleChoice) {
+             newOptions = newOptions.map(opt => ({
+               ...opt,
+               votes: opt.votes.filter(id => id !== currentUser.id)
+             }));
+          }
+
+          newOptions.push(newOption);
+
+          let newReadBy = data.readBy || [];
+          if (!newReadBy.includes(currentUser.id)) newReadBy.push(currentUser.id);
+
+          // Optimistic update
+          setTasks(prev => prev.map(t => t.id === taskId ? { ...t, pollOptions: newOptions, readBy: newReadBy } : t));
+
+          // Firebase update
+          await updateDoc(taskRef, {
+            pollOptions: newOptions,
+            readBy: newReadBy
+          });
+          showToast("Đã thêm lựa chọn mới thành công!");
+        }
+      }
+    } catch (e) {
+      console.error(e);
+      showToast("Lỗi khi thêm lựa chọn mới!");
+    }
+  };
+
   const toggleTaskLock = async (taskId: string) => {
     setTasks((prevTasks) =>
       prevTasks.map((t) =>
@@ -828,6 +885,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
         deleteTask,
         markTaskRead,
         votePoll,
+        addPollOption, // THÊM MỚI VÀO PROVIDER
         toggleTaskLock,
         toggleTaskUrgent,
         toggleCommentsLock,
