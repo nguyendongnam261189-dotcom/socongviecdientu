@@ -47,7 +47,7 @@ export const BottomNav: React.FC = () => {
             active={activeTab === 'dashboard'} 
             onClick={() => setActiveTab('dashboard')}
             icon={<LayoutDashboard className="w-5 h-5" />}
-            label="Quản lý"
+            label="Quản lý & Giao việc"
           />
         )}
         {isAdminOrLeader && (
