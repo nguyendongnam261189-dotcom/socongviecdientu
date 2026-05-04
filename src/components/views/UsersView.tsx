@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { Users, UserPlus, Shield, Star, BookOpen, ChevronLeft, Edit2, Upload, Download, Search, Filter, Plus, X } from 'lucide-react';
-import { cn } from '../../utils';
+import { cn, getUserGrades } from '../../utils';
 import { User, Role } from '../../types';
 import * as XLSX from 'xlsx';
 
@@ -26,20 +26,21 @@ const UserForm = ({ initialUser, onBack, onSubmit, onDelete }: { initialUser?: U
   const [email, setEmail] = useState(initialUser?.email || '');
   const [phone, setPhone] = useState(initialUser?.phone || '');
   
-  // CẤU TRÚC MỚI: Tách biệt Tổ chuyên môn và Nhóm kiêm nhiệm
+  // TỔ CHUYÊN MÔN: Chỉ 1
   const [department, setDepartment] = useState<string>(
     (typeof initialUser?.department === 'string' ? initialUser.department : undefined) || 
     (contextDepartments.length > 0 ? contextDepartments[0] : 'Khác')
   );
-  const [userGroups, setUserGroups] = useState<string[]>(initialUser?.groups || []);
-  const [newGroup, setNewGroup] = useState('');
+  
+  // KHỐI GIẢNG DẠY / NHÓM: Chọn nhiều
+  const [userGrades, setUserGrades] = useState<string[]>(getUserGrades(initialUser?.grade));
+  const [newGrade, setNewGrade] = useState('');
   
   const [role, setRole] = useState<Role>(initialUser?.role || 'teacher');
-  const [grade, setGrade] = useState<string>(initialUser?.grade || (contextGrades.length > 0 ? contextGrades[0] : ''));
 
-  // Tự động gom các Nhóm kiêm nhiệm hiện có trong toàn hệ thống
-  const allSystemGroups = Array.from(new Set(users.flatMap(u => u.groups || []))).filter(Boolean).sort();
-  const displayGroups = Array.from(new Set([...allSystemGroups, ...userGroups]));
+  // Lấy các Khối/Nhóm từ Cài Đặt + Dữ liệu hiện có
+  const allSystemGrades = Array.from(new Set([...contextGrades, ...users.flatMap(u => getUserGrades(u.grade))])).filter(Boolean).sort();
+  const displayGrades = Array.from(new Set([...allSystemGrades, ...userGrades]));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,10 +56,9 @@ const UserForm = ({ initialUser, onBack, onSubmit, onDelete }: { initialUser?: U
       name,
       email,
       phone,
-      department, // Gửi 1 Tổ cố định
-      groups: userGroups, // Gửi mảng Nhóm linh hoạt
-      role,
-      grade
+      department, // 1 Tổ
+      grade: userGrades as any, // Mảng Nhóm/Khối
+      role
     });
   };
 
@@ -111,7 +111,6 @@ const UserForm = ({ initialUser, onBack, onSubmit, onDelete }: { initialUser?: U
               />
             </div>
 
-            {/* TỔ CHUYÊN MÔN: CHỌN 1 */}
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Tổ chuyên môn (Chính)</label>
               <select 
@@ -128,39 +127,48 @@ const UserForm = ({ initialUser, onBack, onSubmit, onDelete }: { initialUser?: U
               </select>
             </div>
 
-            {/* NHÓM KIÊM NHIỆM: CHỌN NHIỀU */}
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Vai trò hệ thống</label>
+              <div className="grid grid-cols-3 gap-2">
+                <RoleOption active={role === 'teacher'} onClick={() => setRole('teacher')} label="Giáo viên" />
+                <RoleOption active={role === 'leader'} onClick={() => setRole('leader')} label="Tổ trưởng" />
+                <RoleOption active={role === 'admin'} onClick={() => setRole('admin')} label="Admin (BGH)" />
+              </div>
+            </div>
+
+            {/* CHUẨN HÓA: Dùng Khối để làm mảng Nhóm kiêm nhiệm */}
             <div className="pt-2 border-t border-slate-100">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Nhóm kiêm nhiệm / Chức vụ khác</label>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Khối giảng dạy / Nhóm kiêm nhiệm (Chọn nhiều)</label>
               <div className="flex flex-wrap gap-2 mb-3">
-                {displayGroups.map(grp => (
+                {displayGrades.map(g => (
                   <button
-                    key={grp}
+                    key={g}
                     type="button"
-                    onClick={() => setUserGroups(prev => prev.includes(grp) ? prev.filter(g => g !== grp) : [...prev, grp])}
+                    onClick={() => setUserGrades(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g])}
                     className={cn(
                       "px-3 py-1.5 rounded-full text-xs font-bold transition-all border",
-                      userGroups.includes(grp) 
-                        ? "bg-indigo-100 border-indigo-200 text-indigo-700 shadow-sm" 
+                      userGrades.includes(g) 
+                        ? "bg-emerald-100 border-emerald-200 text-emerald-700 shadow-sm" 
                         : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-white"
                     )}
                   >
-                    {grp}
+                    {g}
                   </button>
                 ))}
               </div>
               <div className="flex gap-2">
                 <input
                   type="text"
-                  value={newGroup}
-                  onChange={e => setNewGroup(e.target.value)}
-                  placeholder="Thêm nhóm mới..."
+                  value={newGrade}
+                  onChange={e => setNewGrade(e.target.value)}
+                  placeholder="Gõ để thêm Khối/Nhóm mới nếu chưa có..."
                   className="flex-1 bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl px-3 py-2 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
-                      if (newGroup.trim() && !userGroups.includes(newGroup.trim())) {
-                        setUserGroups([...userGroups, newGroup.trim()]);
-                        setNewGroup('');
+                      if (newGrade.trim() && !userGrades.includes(newGrade.trim())) {
+                        setUserGrades([...userGrades, newGrade.trim()]);
+                        setNewGrade('');
                       }
                     }
                   }}
@@ -168,9 +176,9 @@ const UserForm = ({ initialUser, onBack, onSubmit, onDelete }: { initialUser?: U
                 <button
                   type="button"
                   onClick={() => {
-                    if (newGroup.trim() && !userGroups.includes(newGroup.trim())) {
-                      setUserGroups([...userGroups, newGroup.trim()]);
-                      setNewGroup('');
+                    if (newGrade.trim() && !userGrades.includes(newGrade.trim())) {
+                      setUserGrades([...userGrades, newGrade.trim()]);
+                      setNewGrade('');
                     }
                   }}
                   className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs transition-colors flex items-center justify-center"
@@ -180,30 +188,6 @@ const UserForm = ({ initialUser, onBack, onSubmit, onDelete }: { initialUser?: U
               </div>
             </div>
 
-            <div className="pt-2 border-t border-slate-100">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Vai trò hệ thống</label>
-              <div className="grid grid-cols-3 gap-2">
-                <RoleOption active={role === 'teacher'} onClick={() => setRole('teacher')} label="Giáo viên" />
-                <RoleOption active={role === 'leader'} onClick={() => setRole('leader')} label="Tổ trưởng" />
-                <RoleOption active={role === 'admin'} onClick={() => setRole('admin')} label="Admin (BGH)" />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Khối giảng dạy / Chủ nhiệm</label>
-              <select 
-                value={grade}
-                onChange={(e) => setGrade(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all font-medium shadow-inner"
-              >
-                {contextGrades.map(g => (
-                  <option key={g} value={g}>{g}</option>
-                ))}
-                {!contextGrades.includes(grade) && grade !== '' && (
-                  <option value={grade}>{grade} (Khác)</option>
-                )}
-              </select>
-            </div>
           </div>
         </form>
       </div>
@@ -265,18 +249,16 @@ export const UsersView: React.FC = () => {
           
           const name = String(row[0]).trim();
           const department = row[1] ? String(row[1]).trim() : 'Khác';
-          const grade = row[2] ? String(row[2]).trim() : '';
           
-          // ĐÃ NÂNG CẤP MẪU EXCEL: Cột 4 là Nhóm kiêm nhiệm
-          const groupsStr = row[3] ? String(row[3]).trim() : '';
-          const groupsArr = groupsStr.split(',').map(s => s.trim()).filter(Boolean);
+          // IMPORT MẢNG KHỐI/NHÓM BẰNG EXCEL: Cột 3
+          const gradesStr = row[2] ? String(row[2]).trim() : '';
+          const gradesArr = gradesStr.split(',').map(s => s.trim()).filter(Boolean);
 
           addUser({
             name,
             department,
-            groups: groupsArr,
+            grade: gradesArr, // Mảng
             role: 'teacher',
-            grade,
           } as any);
           addedCount++;
         }
@@ -292,16 +274,15 @@ export const UsersView: React.FC = () => {
 
   const handleDownloadTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([
-      ['Họ và tên', 'Tổ chuyên môn (1 tổ)', 'Khối giảng dạy', 'Nhóm kiêm nhiệm (Nhiều nhóm cách nhau dấu phẩy)'],
-      ['Nguyễn Văn A', 'Toán', 'Khối 10', 'Liên tịch, Công đoàn'],
-      ['Trần Thị B', 'Văn', 'Khối 11', 'Hội đồng thi']
+      ['Họ và tên', 'Tổ chuyên môn (1 tổ)', 'Khối/Nhóm kiêm nhiệm (Nhiều nhóm cách nhau dấu phẩy)'],
+      ['Nguyễn Văn A', 'Toán', 'Khối 10, Liên tịch, Công đoàn'],
+      ['Trần Thị B', 'Văn', 'Khối 11, Hội đồng thi']
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'DanhSachNhanSu');
     XLSX.writeFile(wb, 'Mau_DanhSachNhanSu.xlsx');
   };
   
-  // Lấy ra danh sách Tổ chuyên môn cố định
   const allUniqueOfficialDepts = Array.from(new Set([
     ...departments,
     ...users.filter(u => u.status === 'approved').map(u => typeof u.department === 'string' ? u.department : 'Chưa phân bổ')
@@ -450,8 +431,9 @@ export const UsersView: React.FC = () => {
             if (u.status !== 'approved') return false;
             if (searchQuery) {
                const q = searchQuery.toLowerCase();
-               const inGroup = u.groups?.some(g => g.toLowerCase().includes(q));
-               return u.name.toLowerCase().includes(q) || u.role.includes(q) || (u.phone && u.phone.includes(q)) || u.email.toLowerCase().includes(q) || inGroup;
+               const uGrades = getUserGrades(u.grade);
+               const inGrade = uGrades.some(g => g.toLowerCase().includes(q));
+               return u.name.toLowerCase().includes(q) || u.role.includes(q) || (u.phone && u.phone.includes(q)) || u.email.toLowerCase().includes(q) || inGrade;
             }
             return true;
           });
@@ -472,7 +454,9 @@ export const UsersView: React.FC = () => {
                 </div>
               </div>
               <div className="divide-y divide-slate-100">
-                {deptUsers.map(user => (
+                {deptUsers.map(user => {
+                  const uGrades = getUserGrades(user.grade);
+                  return (
                   <div key={user.id} className="p-3 flex items-center justify-between hover:bg-slate-50 transition-colors group">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center font-bold text-indigo-600 text-sm border border-indigo-100 shadow-inner shrink-0">
@@ -481,9 +465,8 @@ export const UsersView: React.FC = () => {
                       <div className="min-w-0">
                         <div className="font-bold text-sm text-slate-800 truncate">{user.name}</div>
                         <div className="text-[11px] text-slate-500 mt-0.5 max-w-[200px] truncate">
-                          {user.grade ? user.grade : 'Chưa phân công'}
-                          {user.groups && user.groups.length > 0 && <span className="text-indigo-500 font-medium"> • Nhóm: {user.groups.join(', ')}</span>}
-                          {user.phone && ` • ${user.phone}`}
+                          {uGrades.length > 0 ? <span className="text-emerald-600 font-medium">{uGrades.join(', ')}</span> : 'Chưa phân công nhóm/khối'}
+                          {user.phone && <span className="text-slate-400"> • {user.phone}</span>}
                         </div>
                       </div>
                     </div>
@@ -497,7 +480,7 @@ export const UsersView: React.FC = () => {
                       )}
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
             </div>
           );
