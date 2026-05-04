@@ -13,16 +13,23 @@ export const getUserGrades = (grade: string | string[] | undefined): string[] =>
   return [grade];
 };
 
-export const isTaskVisible = (task: Task, currentUser: User | null, allUsers?: User[]): boolean => {
+export const isTaskVisible = (task: Task | any, currentUser: User | null, allUsers?: User[]): boolean => {
   if (!currentUser) return false;
   
-  // BLACKLIST NÂNG CẤP: Chặn tuyệt đối người nằm trong danh sách loại trừ (Xử lý các vấn đề tế nhị)
+  // 1. BLACKLIST NÂNG CẤP: Chặn tuyệt đối người nằm trong danh sách loại trừ (Xử lý các vấn đề tế nhị)
   if (task.excludedUsers?.includes(currentUser.id)) return false;
 
-  if (currentUser.role === 'admin') return true;
+  // 2. NGƯỜI TẠO VÀ NGƯỜI ĐƯỢC GIAO LUÔN LUÔN THẤY
   if (task.createdBy === currentUser.id) return true;
   if (task.assignedTo?.includes(currentUser.id)) return true;
 
+  // 3. LUẬT MỚI: Tắt "Có đánh giá tiến độ" (isOfficial === false) -> Chặn tất cả những người không liên quan (kể cả Admin)
+  if (task.isOfficial === false) return false;
+
+  // 4. Nếu bật "Có đánh giá tiến độ" -> Admin được thấy để xem Thống kê và theo dõi
+  if (currentUser.role === 'admin') return true;
+
+  // 5. Nếu bật "Có đánh giá tiến độ" -> Những người cùng nhóm/tổ/phòng ban được thấy để phối hợp
   const userDept = typeof currentUser.department === 'string' 
     ? currentUser.department 
     : (Array.isArray(currentUser.department) ? currentUser.department[0] : '');
