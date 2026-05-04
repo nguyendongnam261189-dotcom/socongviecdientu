@@ -52,6 +52,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
   // KHẢO SÁT (Chỉ dành cho Poll)
   const [pollOptions, setPollOptions] = useState<string[]>(initialTask?.pollOptions?.map(o => o.text) || ['', '']);
   const [pollMultipleChoice, setPollMultipleChoice] = useState(initialTask?.pollMultipleChoice || false);
+  const [allowUserAddOption, setAllowUserAddOption] = useState(initialTask?.allowUserAddOption || false); // THÊM STATE NÀY
   
   // TARGETING
   const [targetType, setTargetType] = useState<'all' | 'specific' | 'individual'>(() => {
@@ -282,6 +283,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
     if (category === 'poll') {
       newTaskParams.pollOptions = pollOptions.filter(o => o.trim() !== '').map((text, idx) => ({ id: `opt-${idx}`, text, votes: [] }));
       newTaskParams.pollMultipleChoice = pollMultipleChoice;
+      newTaskParams.allowUserAddOption = allowUserAddOption; // LƯU CỜ THÊM LỰA CHỌN
     }
 
     if (initialTask) {
@@ -562,6 +564,24 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                   <span className={cn(
                     "absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform shadow-sm",
                     pollMultipleChoice ? "translate-x-5" : "translate-x-0"
+                  )} />
+                </button>
+              </div>
+
+              {/* TÍNH NĂNG MỚI: CHO PHÉP NGƯỜI THAM GIA THÊM LỰA CHỌN */}
+              <div className="mt-2 pt-4 border-t flex items-center justify-between">
+                <span className="text-sm font-bold text-slate-700">Người tham gia được thêm lựa chọn</span>
+                <button
+                  type="button"
+                  onClick={() => setAllowUserAddOption(!allowUserAddOption)}
+                  className={cn(
+                    "w-11 h-6 rounded-full transition-colors relative",
+                    allowUserAddOption ? "bg-emerald-500" : "bg-slate-200"
+                  )}
+                >
+                  <span className={cn(
+                    "absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform shadow-sm",
+                    allowUserAddOption ? "translate-x-5" : "translate-x-0"
                   )} />
                 </button>
               </div>
