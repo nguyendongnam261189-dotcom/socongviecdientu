@@ -6,9 +6,8 @@ export interface User {
   email: string;
   name: string;
   role: Role;
-  department: string; // Tổ chuyên môn (Cố định, dùng để thống kê/báo cáo)
-  groups?: string[];  // CÁC NHÓM KIÊM NHIỆM (Linh hoạt, dùng để giao việc/thông báo nhanh)
-  grade: string; // single grade for simplicity as per spec
+  department: string; 
+  grade: string | string[]; // ĐÃ NÂNG CẤP: Dùng chính trường Khối này làm mảng nhiều Nhóm/Khối
   status: UserStatus;
   avatar?: string;
   phone?: string;
@@ -44,12 +43,10 @@ export interface Task {
   createdBy: string;
   assignedTo: string[]; // User IDs
   targetRoles?: string[];
-  targetDepartments?: string[]; // Gửi theo Tổ chuyên môn
-  targetGrades?: string[];
-  targetGroups?: string[]; // Gửi theo Nhóm kiêm nhiệm
+  targetDepartments?: string[];
+  targetGrades?: string[]; // Gửi theo Khối/Nhóm
   deadline?: string; // ISO date string
 
-  // For tasks
   status?: TaskStatus;
   visibility?: 'public' | 'private';
   submissions?: Submission[];
@@ -60,10 +57,8 @@ export interface Task {
   isUrgent?: boolean;
   commentsLocked?: boolean;
   
-  // For 'announcement' & tasks
   readBy?: string[];
   
-  // For 'poll'
   pollOptions?: PollOption[];
   pollMultipleChoice?: boolean;
   isLocked?: boolean;
@@ -88,7 +83,6 @@ export interface Document {
   driveUrl: string;
   targetRole?: Role;
   targetDepartment?: string;
-  targetGroup?: string; // Lưu nhóm cho tài liệu
   category?: string;
   createdAt: string;
   createdBy: string;
