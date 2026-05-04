@@ -1,14 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { BarChart3, FileSpreadsheet, Calendar } from 'lucide-react';
+import { BarChart3, FileSpreadsheet, Calendar, Info } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { format, isPast, parseISO, isAfter, isBefore, startOfDay, endOfDay } from 'date-fns';
 import { Task, User } from '../../types';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
 
-// HÀM HỖ TRỢ: Kiểm tra xem User có được giao Task hay không (Hỗ trợ cấu trúc Tổ=chuỗi, Nhóm=mảng)
+// HÀM HỖ TRỢ: Kiểm tra xem User có được giao Task hay không
 const isUserAssigned = (t: Task, u: User) => {
-  if (u.role === 'admin') return false; // Thường thống kê không đếm BGH
+  if (u.role === 'admin') return false; 
   const uDept = typeof u.department === 'string' ? u.department : (Array.isArray(u.department) ? u.department[0] : 'Khác');
   const uGrades = Array.isArray(u.grade) ? u.grade : (u.grade ? [u.grade] : []);
   
@@ -23,7 +22,6 @@ const isUserAssigned = (t: Task, u: User) => {
 export const StatisticsView: React.FC = () => {
   const { tasks, users, currentUser } = useAppContext();
   
-  // Date filters
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
 
@@ -35,11 +33,11 @@ export const StatisticsView: React.FC = () => {
     );
   }
 
-  // Filter tasks based on date range and ONLY count Official Tasks
+  // Lọc task có tính thi đua (isOfficial)
   const filteredTasks = useMemo(() => {
     return tasks.filter(t => {
       if (t.category !== 'task') return false;
-      if (t.isOfficial === false) return false; // LUẬT MỚI: Bỏ qua việc nội bộ không tính thi đua
+      if (t.isOfficial === false) return false;
       const tDate = parseISO(t.createdAt);
       if (startDate && isBefore(tDate, startOfDay(parseISO(startDate)))) return false;
       if (endDate && isAfter(tDate, endOfDay(parseISO(endDate)))) return false;
@@ -57,11 +55,9 @@ export const StatisticsView: React.FC = () => {
       const assignedUsers = users.filter(u => isUserAssigned(t, u));
 
       if (assignedUsers.length > 0) {
-        totalAssigned++; // Đếm theo Task (1 Task = 1 Việc)
+        totalAssigned++;
         
         const isGlobalDone = t.status === 'done';
-        
-        // Task được coi là hoàn thành chung nếu TẤT CẢ người được giao đều đã done
         const allDone = isGlobalDone || assignedUsers.every(u => {
           const submission = t.submissions?.find(s => s.userId === u.id);
           return submission?.status === 'done';
@@ -89,11 +85,9 @@ export const StatisticsView: React.FC = () => {
     };
   }, [filteredTasks, users]);
 
-  // Chart data by department
+  // Vẫn giữ logic tính theo Tổ để xuất Excel (Không vẽ biểu đồ)
   const departmentStats = useMemo(() => {
     const deps = new Map<string, { name: string; total: number; completed: number }>();
-    
-    // Initialize map with all user departments
     users.forEach(u => {
       if (u.role !== 'admin') {
          const uDept = typeof u.department === 'string' ? u.department : (Array.isArray(u.department) ? u.department[0] : 'Khác');
@@ -104,7 +98,7 @@ export const StatisticsView: React.FC = () => {
     });
 
     filteredTasks.forEach(t => {
-      const involvedDepts = new Set<string>(); // Khử trùng lặp Tổ
+      const involvedDepts = new Set<string>(); 
       const deptUsersTotal = new Map<string, number>();
       const deptUsersDone = new Map<string, number>();
 
@@ -123,14 +117,12 @@ export const StatisticsView: React.FC = () => {
         }
       });
 
-      // Chỉ tăng +1 cho Tổ đó, dù trong Tổ có bao nhiêu người được giao Task này
       involvedDepts.forEach(deptName => {
         const stat = deps.get(deptName);
         if (stat) {
           stat.total++; 
           const totalInDept = deptUsersTotal.get(deptName) || 0;
           const doneInDept = deptUsersDone.get(deptName) || 0;
-          // Tổ được tính là hoàn thành task nếu tất cả thành viên trong tổ đó đã nộp bài
           if (totalInDept > 0 && totalInDept === doneInDept) {
             stat.completed++;
           }
@@ -142,7 +134,6 @@ export const StatisticsView: React.FC = () => {
   }, [filteredTasks, users]);
 
   const exportExcel = () => {
-    // Logic cho Sheet 1: Tổng quan Tổ chuyên môn
     const overviewData = departmentStats.map(d => ({
       'Tổ chuyên môn': d.name,
       'Tổng số việc': d.total,
@@ -152,7 +143,6 @@ export const StatisticsView: React.FC = () => {
     }));
     const ws1 = XLSX.utils.json_to_sheet(overviewData);
 
-    // Logic cho Sheet 2: Chi tiết Giáo viên
     const teacherStats = users.filter(u => u.role !== 'admin').map(u => {
       let tAssigned = 0;
       let tCompleted = 0;
@@ -185,10 +175,8 @@ export const StatisticsView: React.FC = () => {
     });
     const ws2 = XLSX.utils.json_to_sheet(teacherStats);
 
-    // Logic cho Sheet 3: Chi tiết Công việc (Sửa lại check reportTemplate)
     const taskDetails = filteredTasks.map(t => {
       const assignedNames = users.filter(u => isUserAssigned(t, u)).map(u => u.name).join(', ');
-
       return {
         'Tên công việc': t.title,
         'Mô tả': t.description,
@@ -280,37 +268,15 @@ export const StatisticsView: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
-          <h3 className="font-bold text-slate-800 mb-4">Biểu đồ tiến độ theo Tổ chuyên môn</h3>
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={departmentStats}
-                margin={{ top: 20, right: 30, left: 0, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis 
-                  dataKey="name" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 12, fill: '#64748b', fontWeight: 500 }} 
-                />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 12, fill: '#64748b' }} 
-                />
-                <RechartsTooltip 
-                  cursor={{ fill: '#f8fafc' }}
-                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)' }}
-                />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', fontWeight: 500 }} />
-                <Bar name="Tổng số việc" dataKey="total" fill="#94a3b8" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                <Bar name="Đã hoàn thành" dataKey="completed" fill="#4f46e5" radius={[4, 4, 0, 0]} maxBarSize={40} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+        {/* Khung hướng dẫn thay thế cho biểu đồ */}
+        <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-2xl flex flex-col items-center justify-center text-center mt-8">
+           <Info className="w-10 h-10 text-indigo-300 mb-3" />
+           <h3 className="font-bold text-indigo-800 mb-1">Đánh giá chi tiết hiệu quả công việc</h3>
+           <p className="text-sm text-indigo-600 max-w-md mx-auto">
+             Để xem chi tiết tiến độ nộp bài, số lần trễ hạn của từng giáo viên và từng tổ chuyên môn, vui lòng bấm nút <b>Xuất báo cáo chi tiết</b> ở phía trên.
+           </p>
         </div>
+
       </div>
     </div>
   );
