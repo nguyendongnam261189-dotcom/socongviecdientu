@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { format, parseISO } from 'date-fns';
-import { ChevronLeft, Send, Paperclip, CheckCircle2, Circle, Clock, Trash2, FileText, Download, Lock, Unlock, MessageSquareReply, Edit2, X } from 'lucide-react';
+import { ChevronLeft, Send, Paperclip, CheckCircle2, Circle, Clock, Trash2, FileText, Download, Lock, Unlock, MessageSquareReply, Edit2, X, Search, Filter } from 'lucide-react';
 import { Task } from '../../types';
-import { cn, canDeleteTask, canEditTask } from '../../utils';
+import { cn, canDeleteTask, canEditTask, getUserGrades } from '../../utils';
 import * as XLSX from 'xlsx';
 
 import { TaskForm } from './TaskForm';
@@ -61,7 +61,7 @@ const FilePreview: React.FC<{ title: string, url: string }> = ({ title, url }) =
           onClick={(e) => { e.stopPropagation(); setIsOpen(false); }}
         >
           <div 
-            className="bg-white w-full max-w-4xl h-[90vh] rounded-2xl flex flex-col shadow-2xl overflow-hidden relative"
+            className="bg-white w-full max-w-4xl h-full max-h-[90dvh] md:h-[90vh] rounded-2xl flex flex-col shadow-2xl overflow-hidden relative"
             onClick={(e) => e.stopPropagation()} 
           >
             <div className="flex items-center justify-between p-3 sm:p-4 border-b border-slate-100 bg-white shrink-0">
@@ -114,6 +114,10 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
   
   const [isEditingTask, setIsEditingTask] = useState(false);
 
+  // SEARCH VÀ FILTER CHO DANH SÁCH NGƯỜI NHẬN
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userFilterStatus, setUserFilterStatus] = useState<'all' | 'done' | 'doing' | 'pending'>('all');
+
   useEffect(() => {
     markTaskRead(task.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -145,6 +149,53 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
   const canComment = task.assignedTo?.includes(currentUser?.id || '') || false;
   const isReport = !!task.reportTemplate;
   const myReport = task.submissions?.find(r => r.userId === currentUser?.id);
+
+  // TÍNH TOÁN VÀ LỌC DANH SÁCH NGƯỜI NHẬN
+  const assignedUsersData = useMemo(() => {
+    if (!task.assignedTo) return [];
+    
+    const mapped = task.assignedTo.map(uid => {
+      const u = users.find(user => user.id === uid);
+      const isRead = task.readBy?.includes(uid);
+      const sub = task.submissions?.find(r => r.userId === uid);
+      
+      let statusType: 'done' | 'doing' | 'pending' = 'pending';
+      if (task.category === 'announcement') {
+        if (isRead) statusType = 'done'; // Với thông báo, xem như là done
+      } else {
+        if (sub?.status === 'done' || (sub && !sub.status)) statusType = 'done';
+        else if (sub?.status === 'doing' || sub?.status === 'acknowledged') statusType = 'doing';
+      }
+
+      return { uid, user: u, statusType, isRead, submission: sub };
+    });
+
+    return mapped.filter(item => {
+      // Lọc theo trạng thái
+      if (userFilterStatus !== 'all') {
+        if (userFilterStatus === 'pending' && item.statusType !== 'pending') return false;
+        if (userFilterStatus === 'done' && item.statusType !== 'done') return false;
+        if (userFilterStatus === 'doing' && item.statusType !== 'doing') return false;
+      }
+      
+      // Lọc theo từ khóa tìm kiếm
+      if (userSearchQuery) {
+        const q = userSearchQuery.toLowerCase();
+        const u = item.user;
+        if (!u) return false;
+        
+        const uGrades = getUserGrades(u.grade);
+        const matchName = u.name.toLowerCase().includes(q);
+        const matchDept = u.department && u.department.toLowerCase().includes(q);
+        const matchGroup = uGrades.some(g => g.toLowerCase().includes(q));
+        
+        if (!matchName && !matchDept && !matchGroup) return false;
+      }
+
+      return true;
+    });
+  }, [task, users, userFilterStatus, userSearchQuery]);
+
 
   const handleSend = () => {
     if (!newComment.trim()) return;
@@ -288,18 +339,14 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
     XLSX.writeFile(wb, `Bao_cao_${task.title.replace(/ /g, '_')}.xlsx`);
   };
 
-  const handleDocumentClick = (e: React.MouseEvent) => {
-    // Optional utility wrapper
-  };
-
   const renderAdminReportTable = () => {
     if (!task.reportTemplate || task.reportTemplate.length === 0) return null;
     
     const sums: Record<string, number> = {};
     task.reportTemplate.filter(f => f.type === 'number').forEach(f => {
-      sums[f.id] = task.assignedTo.reduce((acc, uid) => {
-        const r = task.submissions?.find(rep => rep.userId === uid);
-        const val = r ? r.data?.[f.id] : task.reportPrefill?.[uid]?.[f.id];
+      sums[f.id] = assignedUsersData.reduce((acc, item) => {
+        const r = item.submission;
+        const val = r ? r.data?.[f.id] : task.reportPrefill?.[item.uid]?.[f.id];
         return acc + (val ? Number(val) : 0);
       }, 0);
     });
@@ -317,16 +364,21 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {task.assignedTo.map(uid => {
-              const u = users.find(user => user.id === uid);
-              const r = task.submissions?.find(rep => rep.userId === uid);
+            {assignedUsersData.map(item => {
+              const { uid, user: u, statusType, isRead, submission: r } = item;
               return (
                 <tr key={uid} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-slate-800">{u?.name || uid}</td>
+                  <td className="px-4 py-3 font-medium text-slate-800">
+                    <div>{u?.name || uid}</div>
+                    <div className="text-[10px] text-slate-400 font-normal">
+                      {typeof u?.department === 'string' ? u.department : 'Khác'}
+                      {u && getUserGrades(u.grade).length > 0 && ` • ${getUserGrades(u.grade).join(', ')}`}
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
-                    {r?.status === 'done' || (r && !r.status) ? <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-lg border border-emerald-200">Đã hoàn thành</span> : 
-                     (r?.status === 'doing' || r?.status === 'acknowledged') ? <span className="text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-lg border border-amber-200">Đã nắm thông tin/Đang làm</span> : 
-                     task.readBy?.includes(uid) ? <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">Đã xem</span> :
+                    {statusType === 'done' ? <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-lg border border-emerald-200">Đã hoàn thành</span> : 
+                     statusType === 'doing' ? <span className="text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-lg border border-amber-200">Đang làm</span> : 
+                     isRead ? <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">Đã xem</span> :
                      <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100">Chưa làm</span>}
                   </td>
                   {task.reportTemplate!.map(f => {
@@ -345,7 +397,14 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
                 </tr>
               )
             })}
-            {task.reportTemplate.some(f => f.type === 'number') && (
+            {assignedUsersData.length === 0 && (
+              <tr>
+                <td colSpan={task.reportTemplate.length + 2} className="px-4 py-8 text-center text-slate-400 text-sm italic">
+                  Không tìm thấy kết quả phù hợp.
+                </td>
+              </tr>
+            )}
+            {task.reportTemplate.some(f => f.type === 'number') && assignedUsersData.length > 0 && (
               <tr className="bg-indigo-50/50 font-bold">
                 <td className="px-4 py-3 text-indigo-800" colSpan={2}>Tổng cộng</td>
                 {task.reportTemplate.map(f => (
@@ -620,55 +679,86 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack }) => {
 
         {task.category !== 'poll' && canModify && (
           <div className="p-4 bg-white border-b border-slate-200">
-            <div className="flex justify-between items-center mb-4">
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                {task.category === 'announcement' ? `Đã xem (${task.readBy?.length || 0}/${task.assignedTo?.length || 0})` : 
-                 isReport ? `Danh sách nộp (${task.submissions?.filter(s => s.status === 'done' || (!s.status && s.fileUrl)).length || 0}/${task.assignedTo.length})` :
-                 `Trạng thái (${task.submissions?.filter(s => s.status === 'done').length || 0}/${task.assignedTo.length})`}
-              </h4>
-              {task.reportTemplate && task.reportTemplate.length > 0 && (
-                <button 
-                  onClick={exportToExcel}
-                  className="flex items-center gap-1 text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors"
+            {/* THANH CÔNG CỤ TÌM KIẾM VÀ LỌC */}
+            <div className="flex flex-col gap-3 mb-4">
+              <div className="flex justify-between items-center">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  {task.category === 'announcement' ? `Tiến độ (${task.readBy?.length || 0}/${task.assignedTo?.length || 0})` : 
+                   isReport ? `Danh sách nộp (${task.submissions?.filter(s => s.status === 'done' || (!s.status && s.fileUrl)).length || 0}/${task.assignedTo?.length || 0})` :
+                   `Trạng thái (${task.submissions?.filter(s => s.status === 'done').length || 0}/${task.assignedTo?.length || 0})`}
+                </h4>
+                {task.reportTemplate && task.reportTemplate.length > 0 && (
+                  <button 
+                    onClick={exportToExcel}
+                    className="flex items-center gap-1 text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Xuất Excel
+                  </button>
+                )}
+              </div>
+              
+              <div className="flex gap-2 items-center flex-wrap">
+                <div className="relative flex-1 min-w-[150px]">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input 
+                    type="text"
+                    placeholder="Tìm tên, tổ, nhóm..."
+                    value={userSearchQuery}
+                    onChange={e => setUserSearchQuery(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 text-xs rounded-lg pl-8 pr-3 py-2 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 transition-all font-medium"
+                  />
+                </div>
+                <select 
+                  value={userFilterStatus}
+                  onChange={e => setUserFilterStatus(e.target.value as any)}
+                  className="bg-slate-50 border border-slate-200 text-xs rounded-lg px-3 py-2 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 font-medium text-slate-600"
                 >
-                  <Download className="w-3.5 h-3.5" /> Xuất Excel
-                </button>
-              )}
+                  <option value="all">Tất cả</option>
+                  <option value="pending">Chưa làm / Chưa xem</option>
+                  <option value="doing">Đang xử lý</option>
+                  <option value="done">Đã hoàn thành</option>
+                </select>
+              </div>
             </div>
             
             {task.reportTemplate && task.reportTemplate.length > 0 ? (
               renderAdminReportTable()
             ) : (
-              <div className="space-y-2">
-                {task.assignedTo?.map(uid => {
-                  const isRead = task.readBy?.includes(uid);
-                  const sub = task.submissions?.find(r => r.userId === uid);
-                  const userName = users.find(u => u.id === uid)?.name || uid;
+              <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
+                {assignedUsersData.map(item => {
+                  const { uid, user: u, statusType, isRead } = item;
+                  const userName = u?.name || uid;
+                  const uDept = typeof u?.department === 'string' ? u.department : 'Khác';
+                  const uGrades = u ? getUserGrades(u.grade) : [];
                   
                   let badge = <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100">Chưa xem</span>;
-                  if (task.category === 'announcement') {
-                    if (isRead) badge = <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-lg border border-emerald-200">Đã xem</span>;
+                  if (statusType === 'done') {
+                    badge = <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-lg border border-emerald-200">{task.category === 'announcement' ? 'Đã xem' : 'Đã hoàn thành'}</span>;
+                  } else if (statusType === 'doing') {
+                    badge = <span className="text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-lg border border-amber-200">Đang làm</span>;
+                  } else if (isRead) {
+                    badge = <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">Đã xem</span>;
                   } else {
-                    if (sub?.status === 'done' || (sub && !sub.status)) {
-                      badge = <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-lg border border-emerald-200">Đã hoàn thành</span>;
-                    } else if (sub?.status === 'doing' || sub?.status === 'acknowledged') {
-                      badge = <span className="text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-lg border border-amber-200">Đã nắm thông tin/Đang làm</span>;
-                    } else if (isRead) {
-                      badge = <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">Đã xem</span>;
-                    } else {
-                      badge = <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100">Chưa làm</span>;
-                    }
+                    badge = <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100">Chưa làm</span>;
                   }
 
                   return (
-                    <div key={uid} className="flex justify-between items-center p-3 rounded-xl border bg-slate-50">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-slate-700">{userName}</span>
+                    <div key={uid} className="flex justify-between items-center p-3 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100/50 transition-colors">
+                      <div className="flex flex-col min-w-0 pr-2">
+                        <span className="font-bold text-sm text-slate-700 truncate">{userName}</span>
+                        <span className="text-[10px] text-slate-400 truncate mt-0.5">
+                          {uDept} {uGrades.length > 0 && <span className="text-indigo-400 ml-1">• {uGrades.join(', ')}</span>}
+                        </span>
                       </div>
-                      {badge}
+                      <div className="shrink-0">{badge}</div>
                     </div>
                   )
                 })}
+                {assignedUsersData.length === 0 && (
+                   <div className="text-center py-6 text-slate-400 text-xs italic">
+                     Không tìm thấy kết quả phù hợp.
+                   </div>
+                )}
               </div>
             )}
           </div>
