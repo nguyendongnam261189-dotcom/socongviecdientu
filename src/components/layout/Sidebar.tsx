@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { CheckSquare, Bell, FileText, LayoutDashboard, Users, School, LogOut, Settings, CalendarDays, BarChart3 } from 'lucide-react';
+import { FileText, LayoutDashboard, Users, School, LogOut, Settings, BarChart3, Inbox } from 'lucide-react';
 import { cn, isTaskVisible } from '../../utils';
 
 export const Sidebar: React.FC = () => {
@@ -8,19 +8,31 @@ export const Sidebar: React.FC = () => {
 
   if (!currentUser) return null;
 
-  const unreadNotifs = tasks.filter(t => 
-    (t.category === 'announcement' || t.category === 'poll') && 
-    isTaskVisible(t, currentUser, users) &&
-    !(t.readBy?.includes(currentUser.id))
-  ).length;
-  
-  const todoTasks = tasks.filter(t => 
-    t.category === 'task' &&
-    isTaskVisible(t, currentUser, users) &&
-    t.assignedTo.includes(currentUser.id) && 
-    t.status !== 'done' && 
-    !t.submissions?.find(r => r.userId === currentUser.id)
-  ).length;
+  // TÍNH TỔNG SỐ LƯỢNG MỤC CẦN XỬ LÝ (GỘP CẢ 3 LOẠI VÀO INBOX)
+  const pendingInboxCount = tasks.filter(t => {
+    if (!isTaskVisible(t, currentUser, users)) return false;
+
+    // Không đếm những việc do chính mình tạo (trừ khi tự giao cho mình)
+    if (t.createdBy === currentUser.id && (!t.assignedTo || !t.assignedTo.includes(currentUser.id))) return false;
+
+    if (t.category === 'announcement') {
+      return !t.readBy?.includes(currentUser.id);
+    } 
+    if (t.category === 'poll') {
+      return !t.pollOptions?.some(opt => opt.votes?.includes(currentUser.id));
+    } 
+    if (t.category === 'task') {
+       if (!t.assignedTo?.includes(currentUser.id)) return false;
+       if (t.status === 'done') return false; // Task đã chốt sổ
+       
+       const isReport = !!t.reportTemplate && t.reportTemplate.length > 0;
+       const mySubmission = t.submissions?.find(r => r.userId === currentUser.id);
+       
+       const isDone = mySubmission?.status === 'done' || (isReport && !!mySubmission);
+       return !isDone;
+    }
+    return false;
+  }).length;
 
   const isAdminOrLeader = currentUser.role === 'admin' || currentUser.role === 'leader';
   const isAdminOrBGH = currentUser.role === 'admin' || currentUser.department === 'BGH';
@@ -72,20 +84,15 @@ export const Sidebar: React.FC = () => {
           </>
         )}
 
+        {/* NÚT INBOX GỘP CHUNG */}
         <NavItem 
           active={activeTab === 'tasks'} 
           onClick={() => setActiveTab('tasks')}
-          icon={<CheckSquare className="w-5 h-5" />}
-          label="Việc làm & Báo cáo"
-          badge={todoTasks}
+          icon={<Inbox className="w-5 h-5" />}
+          label="Hộp thư / Việc của tôi"
+          badge={pendingInboxCount}
         />
-        <NavItem 
-          active={activeTab === 'notifications'} 
-          onClick={() => setActiveTab('notifications')}
-          icon={<Bell className="w-5 h-5" />}
-          label="Thông báo chung"
-          badge={unreadNotifs}
-        />
+        
         <NavItem 
           active={activeTab === 'documents'} 
           onClick={() => setActiveTab('documents')}
