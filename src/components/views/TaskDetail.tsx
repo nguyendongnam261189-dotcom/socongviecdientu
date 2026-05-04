@@ -11,7 +11,6 @@ import { TaskForm } from './TaskForm';
 interface TaskDetailProps {
   task: Task;
   onBack: () => void;
-  // LUẬT MỚI: Nếu là true -> Đang đứng ở Tab 1 (Quản lý) -> Ẩn nút nộp bài cá nhân đi
   isManagerView?: boolean; 
 }
 
@@ -115,7 +114,6 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack, isManagerV
   const [uploadProgressState, setUploadProgressState] = useState('');
   
   const [isEditingTask, setIsEditingTask] = useState(false);
-
   const [userSearchQuery, setUserSearchQuery] = useState('');
 
   useEffect(() => {
@@ -148,10 +146,8 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack, isManagerV
   const canComment = task.assignedTo?.includes(currentUser?.id || '') || false;
   const isReport = !!task.reportTemplate && task.reportTemplate.length > 0;
   const myReport = task.submissions?.find(r => r.userId === currentUser?.id);
-  
   const isTaskClosed = task.status === 'done';
 
-  // HÀM: Gửi thông báo đôn đốc cá nhân
   const handleRemindIndividual = async (uid: string, userName: string) => {
     const targetUser = users.find(u => u.id === uid);
     if (!targetUser?.fcmTokens) {
@@ -176,7 +172,6 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack, isManagerV
     }
   };
 
-  // TÍNH TOÁN VÀ LỌC DANH SÁCH NGƯỜI NHẬN
   const assignedUsersData = useMemo(() => {
     if (!task.assignedTo) return [];
     
@@ -214,7 +209,6 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack, isManagerV
     });
   }, [task, users, userSearchQuery]);
 
-  // CHIA NHÓM TRẠNG THÁI ĐỂ HIỂN THỊ
   const doneUsers = assignedUsersData.filter(u => u.statusType === 'done');
   const doingUsers = assignedUsersData.filter(u => u.statusType === 'doing');
   const pendingUsers = assignedUsersData.filter(u => u.statusType === 'pending');
@@ -364,22 +358,35 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack, isManagerV
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {/* Sắp xếp cho nhóm Chưa làm lên đầu trong bảng Excel view */}
             {[...pendingUsers, ...doingUsers, ...doneUsers].map(item => {
               const { uid, user: u, statusType, isRead, submission: r } = item;
+              const userName = u?.name || uid;
               return (
                 <tr key={uid} className="hover:bg-slate-50 transition-colors">
                   <td className="px-4 py-3 font-medium text-slate-800">
-                    <div>{u?.name || uid}</div>
+                    <div>{userName}</div>
                     <div className="text-[10px] text-slate-400 font-normal">
                       {typeof u?.department === 'string' ? u.department : 'Khác'}
                       {u && getUserGrades(u.grade).length > 0 && ` • ${getUserGrades(u.grade).join(', ')}`}
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    {statusType === 'done' ? <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-lg border border-emerald-200">Đã hoàn thành</span> : 
-                     statusType === 'doing' ? <span className="text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-lg border border-amber-200">Đang làm</span> : 
-                     <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100">Chưa làm</span>}
+                    <div className="flex items-center gap-2">
+                      {statusType === 'done' ? <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-lg border border-emerald-200">Đã hoàn thành</span> : 
+                       statusType === 'doing' ? <span className="text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-lg border border-amber-200">Đang làm</span> : 
+                       <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100">Chưa làm</span>}
+                      
+                      {/* VÁ LỖI MẤT CHUÔNG Ở BẢNG EXCEL: NÚT CHUÔNG ĐƯỢC CHÈN VÀO ĐÂY */}
+                      {statusType !== 'done' && !isTaskClosed && canModify && (
+                        <button 
+                          onClick={() => handleRemindIndividual(uid, userName)}
+                          className="p-1.5 bg-rose-100 hover:bg-rose-200 text-rose-600 rounded-lg transition-colors border border-rose-200 shadow-sm"
+                          title="Nhắc nhở cá nhân này"
+                        >
+                          <BellRing className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                   {task.reportTemplate!.map(f => {
                     const preVal = task.reportPrefill?.[uid]?.[f.id];
@@ -414,7 +421,6 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack, isManagerV
     );
   };
 
-  // UI Reusable cho từng dòng người dùng
   const renderUserRow = (item: any) => {
     const { uid, user: u, statusType } = item;
     const userName = u?.name || uid;
@@ -438,7 +444,6 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack, isManagerV
         </div>
         <div className="shrink-0 flex items-center gap-2">
           {badge}
-          {/* NÚT CHUÔNG BÁO THỨC CÁ NHÂN */}
           {statusType !== 'done' && !isTaskClosed && canModify && (
             <button 
               onClick={() => handleRemindIndividual(uid, userName)}
@@ -466,7 +471,6 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack, isManagerV
         </div>
         {canModify && (
           <div className="flex gap-1 shrink-0 -mr-2">
-            {/* NÚT ĐÓNG / MỞ TASK */}
             <button 
               onClick={toggleTaskCloseStatus} 
               className={cn("p-2 rounded-full transition-colors shrink-0", isTaskClosed ? "text-slate-500 hover:bg-slate-100" : "text-emerald-600 hover:bg-emerald-50")}
@@ -532,7 +536,6 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack, isManagerV
             </div>
           )}
 
-          {/* VÙNG THAO TÁC CÁ NHÂN (BỊ ẨN NẾU ĐỨNG Ở TAB QUẢN LÝ) */}
           {!isManagerView && !isTaskClosed && currentUser && task.assignedTo?.includes(currentUser.id) && task.category === 'task' && (
             <div className="mt-4 pt-4 border-t border-slate-100">
               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Trạng thái của bạn</h4>
@@ -564,7 +567,6 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack, isManagerV
           )}
         </div>
 
-        {/* NỘP BÁO CÁO (BỊ ẨN NẾU LÀ MANAGER VIEW) */}
         {!isManagerView && isReport && (
           <div className="p-4 bg-white border-b border-slate-200">
             <div className="flex justify-between items-center mb-4">
@@ -639,7 +641,6 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack, isManagerV
           </div>
         )}
 
-        {/* BẢNG THEO DÕI CHO QUẢN LÝ (CHỈ ADMIN/LEADER VÀ KHI KHÔNG PHẢI LÀ TAB CÁ NHÂN MỚI QUAN TÂM NHIỀU) */}
         {canModify && (
           <div className="p-4 bg-slate-100/50 border-b border-slate-200">
             <div className="flex flex-col gap-3 mb-4">
@@ -666,7 +667,6 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack, isManagerV
               renderAdminReportTable()
             ) : (
               <div className="space-y-4 pr-1">
-                {/* NHÓM 1: CHƯA LÀM / ĐANG LÀM (HIỆN LÊN ĐẦU ĐỂ DỄ ĐÔN ĐỐC) */}
                 {(pendingUsers.length > 0 || doingUsers.length > 0) && (
                   <div className="space-y-2">
                     <h5 className="text-[10px] font-bold text-rose-500 uppercase tracking-wider bg-rose-50 p-1.5 rounded inline-block">Cần đôn đốc</h5>
@@ -675,7 +675,6 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack, isManagerV
                   </div>
                 )}
                 
-                {/* NHÓM 2: ĐÃ XONG (CHO XUỐNG DƯỚI) */}
                 {doneUsers.length > 0 && (
                   <div className="space-y-2 mt-4 pt-4 border-t border-slate-200">
                     <h5 className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider bg-emerald-50 p-1.5 rounded inline-block">Đã hoàn thành</h5>
@@ -691,7 +690,6 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack, isManagerV
           </div>
         )}
 
-        {/* KHU VỰC TRAO ĐỔI COMMENT */}
         {task.category !== 'announcement' && (
         <div className="p-4 bg-slate-50">
           <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-1.5">
@@ -756,7 +754,6 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack, isManagerV
         )}
       </div>
 
-      {/* VÙNG NHẬP COMMENT LUÔN GẮN Ở ĐÁY */}
       {task.category !== 'announcement' && canComment && (
       <div className="bg-white p-3 border-t border-slate-200 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)]">
         {task.commentsLocked || isTaskClosed ? (
