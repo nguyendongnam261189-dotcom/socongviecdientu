@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { CheckSquare, Bell, FileText, LayoutDashboard, Users, Settings, CalendarDays, BarChart3 } from 'lucide-react';
+import { CheckSquare, FileText, LayoutDashboard, Users, Settings, BarChart3, Inbox } from 'lucide-react';
 import { cn, isTaskVisible } from '../../utils';
 
 export const BottomNav: React.FC = () => {
@@ -8,19 +8,31 @@ export const BottomNav: React.FC = () => {
 
   if (!currentUser) return null;
 
-  const unreadNotifs = tasks.filter(t => 
-    (t.category === 'announcement' || t.category === 'poll') && 
-    isTaskVisible(t, currentUser, users) &&
-    !(t.readBy?.includes(currentUser.id))
-  ).length;
-  
-  const todoTasks = tasks.filter(t => 
-    t.category === 'task' &&
-    isTaskVisible(t, currentUser, users) &&
-    t.assignedTo.includes(currentUser.id) && 
-    t.status !== 'done' && 
-    !t.submissions?.find(r => r.userId === currentUser.id)
-  ).length;
+  // TÍNH TỔNG SỐ LƯỢNG MỤC CẦN XỬ LÝ (GỘP CẢ 3 LOẠI)
+  const pendingInboxCount = tasks.filter(t => {
+    if (!isTaskVisible(t, currentUser, users)) return false;
+
+    // Không đếm những việc do chính mình tạo (trừ khi tự giao cho mình)
+    if (t.createdBy === currentUser.id && (!t.assignedTo || !t.assignedTo.includes(currentUser.id))) return false;
+
+    if (t.category === 'announcement') {
+      return !t.readBy?.includes(currentUser.id);
+    } 
+    if (t.category === 'poll') {
+      return !t.pollOptions?.some(opt => opt.votes?.includes(currentUser.id));
+    } 
+    if (t.category === 'task') {
+       if (!t.assignedTo?.includes(currentUser.id)) return false;
+       if (t.status === 'done') return false; // Task đã chốt sổ
+       
+       const isReport = !!t.reportTemplate && t.reportTemplate.length > 0;
+       const mySubmission = t.submissions?.find(r => r.userId === currentUser.id);
+       
+       const isDone = mySubmission?.status === 'done' || (isReport && !!mySubmission);
+       return !isDone;
+    }
+    return false;
+  }).length;
 
   const isAdminOrLeader = currentUser.role === 'admin' || currentUser.role === 'leader';
   const isAdminOrBGH = currentUser.role === 'admin' || currentUser.department === 'BGH';
@@ -28,14 +40,8 @@ export const BottomNav: React.FC = () => {
   return (
     <div className="bg-white border-t border-slate-200 pb-safe z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] overflow-x-auto no-scrollbar">
       <div className="flex items-center justify-start min-w-max md:justify-around h-16 px-2">
-        {isAdminOrBGH && (
-          <NavItem 
-            active={activeTab === 'users'} 
-            onClick={() => setActiveTab('users')}
-            icon={<Users className="w-5 h-5" />}
-            label="Thành viên"
-          />
-        )}
+        
+        {/* Nút Quản lý & Thống kê dành cho BGH/Tổ trưởng */}
         {isAdminOrLeader && (
           <NavItem 
             active={activeTab === 'dashboard'} 
@@ -52,26 +58,32 @@ export const BottomNav: React.FC = () => {
             label="Thống kê"
           />
         )}
+
+        {/* SIÊU TAB INBOX DÀNH CHO TẤT CẢ MỌI NGƯỜI */}
         <NavItem 
           active={activeTab === 'tasks'} 
           onClick={() => setActiveTab('tasks')}
-          icon={<CheckSquare className="w-5 h-5" />}
-          label="Việc làm"
-          badge={todoTasks}
+          icon={<Inbox className="w-5 h-5" />} // Đổi Icon sang Hộp thư cho hợp với ý nghĩa mới
+          label="Hộp thư"
+          badge={pendingInboxCount}
         />
-        <NavItem 
-          active={activeTab === 'notifications'} 
-          onClick={() => setActiveTab('notifications')}
-          icon={<Bell className="w-5 h-5" />}
-          label="Thông báo"
-          badge={unreadNotifs}
-        />
+
         <NavItem 
           active={activeTab === 'documents'} 
           onClick={() => setActiveTab('documents')}
           icon={<FileText className="w-5 h-5" />}
           label="Tài liệu"
         />
+
+        {isAdminOrBGH && (
+          <NavItem 
+            active={activeTab === 'users'} 
+            onClick={() => setActiveTab('users')}
+            icon={<Users className="w-5 h-5" />}
+            label="Thành viên"
+          />
+        )}
+
         {currentUser.role === 'admin' && (
           <NavItem 
             active={activeTab === 'settings'} 
