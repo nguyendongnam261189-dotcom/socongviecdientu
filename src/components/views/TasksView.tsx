@@ -40,7 +40,12 @@ export const TasksView: React.FC = () => {
     if (t.status === 'done') {
       isDone = true; // Task đã bị đóng global
     } else if (t.category === 'announcement') {
-      isDone = hasRead;
+      // LUẬT MỚI: Nếu có deadline, phải vừa XEM và vừa QUA HẠN thì mới cất đi.
+      if (t.deadline) {
+        isDone = hasRead && isPast(parseISO(t.deadline));
+      } else {
+        isDone = hasRead;
+      }
     } else if (t.category === 'poll') {
       isDone = hasVoted;
     } else {
@@ -172,12 +177,17 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
   const hasRead = task.readBy?.includes(currentUser?.id || '');
   const hasVoted = task.pollOptions?.some(opt => opt.votes?.includes(currentUser?.id || ''));
   
-  // Xác định trạng thái "Đã xong" tùy theo thể loại
+  // Xác định trạng thái "Đã xong"
   let isDone = false;
   if (task.status === 'done') {
     isDone = true;
   } else if (task.category === 'announcement') {
-    isDone = hasRead;
+    // Tương tự, card cũng cần luật này để render đúng trạng thái
+    if (task.deadline) {
+      isDone = hasRead && isPast(parseISO(task.deadline));
+    } else {
+      isDone = hasRead;
+    }
   } else if (task.category === 'poll') {
     isDone = hasVoted;
   } else {
@@ -202,12 +212,13 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
      colorTheme = "border-amber-200";
   }
 
-  // TÍNH NĂNG MƯỢN TỪ NOTIFICATION: Xử lý thao tác nhanh
   const handleQuickAction = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (task.category === 'announcement') {
-       markTaskRead(task.id);
-       showToast('Đã đánh dấu là Đã xem');
+       if (!hasRead) {
+          markTaskRead(task.id);
+          showToast('Đã đánh dấu là Đã xem');
+       }
        return;
     }
     if (task.category === 'task' && !isReport) {
@@ -217,7 +228,6 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
     }
   };
 
-  // TÍNH NĂNG MƯỢN TỪ NOTIFICATION: Bầu chọn trực tiếp
   const handleInlineVote = (e: React.MouseEvent, optionId: string) => {
     e.stopPropagation();
     if (task.isLocked) {
@@ -234,7 +244,6 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
     }
   };
 
-  // Tính toán số liệu cho Poll và Announcement Progress
   const canManage = canEditTask(task, currentUser, users);
   const totalVotes = task.pollOptions?.reduce((acc, opt) => acc + opt.votes.length, 0) || 0;
 
@@ -265,12 +274,15 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
                task.isUrgent && task.category === 'task' ? "bg-rose-100 text-rose-700 border-rose-200" :
                task.category === 'task' && isReport ? "bg-amber-100 text-amber-700 border-amber-200" :
                task.category === 'task' && myReport?.status === 'doing' ? "bg-amber-100 text-amber-700 border-amber-200" :
+               task.category === 'announcement' && hasRead ? "bg-indigo-100 text-indigo-700 border-indigo-200" :
                "bg-slate-100 text-slate-600 border-slate-200"
              )}>
                {task.isUrgent && task.category === 'task' && <Zap className="w-3 h-3 text-rose-500 fill-rose-500" />}
                {task.category === 'task' && isReport ? 'Cần nộp báo cáo' : 
                 task.category === 'task' && myReport?.status === 'doing' ? 'Đang làm' : 
-                task.category === 'poll' ? 'Cần tham gia' : 'Chưa xem / Chưa làm'}
+                task.category === 'poll' ? 'Cần tham gia' : 
+                task.category === 'announcement' ? (hasRead ? 'Đã xem (Chờ sự kiện)' : 'Chưa xem') : 
+                'Chưa xem / Chưa làm'}
              </span>
           )}
 
@@ -292,14 +304,14 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
       <div className="flex gap-3 items-start mt-2">
         <button 
           onClick={handleQuickAction} 
-          disabled={task.category === 'poll' || (task.category === 'task' && isReport)}
+          disabled={task.category === 'poll' || (task.category === 'task' && isReport) || (task.category === 'announcement' && hasRead)}
           className={cn(
             "mt-0.5 flex-shrink-0 z-10 transition-colors",
-            task.category === 'poll' || (task.category === 'task' && isReport) ? "cursor-default" : "cursor-pointer",
-            isDone ? "text-emerald-500" : "text-slate-300 hover:text-indigo-500"
+            task.category === 'poll' || (task.category === 'task' && isReport) || (task.category === 'announcement' && hasRead) ? "cursor-default" : "cursor-pointer",
+            isDone || (task.category === 'announcement' && hasRead) ? "text-emerald-500" : "text-slate-300 hover:text-indigo-500"
           )}
         >
-          {isDone ? <CheckCircle2 className="w-6 h-6" /> : <Circle className="w-6 h-6" />}
+          {isDone || (task.category === 'announcement' && hasRead) ? <CheckCircle2 className="w-6 h-6" /> : <Circle className="w-6 h-6" />}
         </button>
         
         <div className="flex-1 min-w-0">
@@ -314,7 +326,6 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
             {task.description}
           </p>
 
-          {/* TÍNH NĂNG MƯỢN TỪ NOTIFICATION: KHẢO SÁT INLINE */}
           {task.category === 'poll' && task.pollOptions && (
             <div className="mt-3 space-y-1.5 relative z-10">
               {task.pollOptions.map(opt => {
@@ -340,14 +351,12 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
             </div>
           )}
 
-          {/* TÍNH NĂNG MƯỢN TỪ NOTIFICATION: Nút xem nhanh cho thông báo */}
-          {!isDone && task.category === 'announcement' && (
+          {!isDone && task.category === 'announcement' && !hasRead && (
             <button onClick={handleQuickAction} className="mt-3 flex items-center gap-1.5 text-[11px] bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg font-bold hover:bg-indigo-200 shadow-sm z-10 relative">
               <Check className="w-3.5 h-3.5" /> Đã nắm thông tin
             </button>
           )}
 
-          {/* TÍNH NĂNG MƯỢN TỪ NOTIFICATION: Thanh tiến độ siêu tốc cho Quản lý */}
           {task.category === 'announcement' && canManage && (
             <div className="mt-3 pt-3 border-t border-slate-100/50">
               <div className="flex justify-between items-center mb-1">
@@ -376,7 +385,7 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
           )}
         </div>
         {isDone && (
-          <span className="text-emerald-600 italic normal-case font-medium">✓ Đã xử lý</span>
+          <span className="text-emerald-600 italic normal-case font-medium">✓ Đã hoàn thành</span>
         )}
       </div>
     </div>
