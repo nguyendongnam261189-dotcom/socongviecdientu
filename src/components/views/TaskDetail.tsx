@@ -149,28 +149,28 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack, isManagerV
   const isTaskClosed = task.status === 'done';
 
   const handleRemindIndividual = async (uid: string, userName: string) => {
-    const targetUser = users.find(u => u.id === uid);
-    if (!targetUser?.fcmTokens) {
-      showToast('Giáo viên này chưa cài App hoặc chưa bật thông báo!');
-      return;
-    }
-    try {
-      const tokens = Array.isArray(targetUser.fcmTokens) ? targetUser.fcmTokens : [targetUser.fcmTokens];
-      await fetch('/api/notify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tokens,
-          title: '🔔 NHẮC NHỞ CÔNG VIỆC',
-          body: `Bạn chưa hoàn thành/xem nội dung: "${task.title}". Vui lòng kiểm tra ngay!`
-        })
-      });
-      showToast(`Đã gửi nhắc nhở đến ${userName}!`);
-    } catch (err) {
-      console.error(err);
-      showToast('Lỗi khi gửi nhắc nhở.');
-    }
-  };
+  const targetUser = users.find(u => u.id === uid);
+  if (!targetUser?.fcmTokens) {
+    showToast('Giáo viên này chưa cài App!');
+    return;
+  }
+  try {
+    const tokens = Array.isArray(targetUser.fcmTokens) ? targetUser.fcmTokens : [targetUser.fcmTokens];
+    await fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tokens,
+        title: '🔔 NHẮC NHỞ TIẾN ĐỘ',
+        body: `Chào ${userName}, việc "${task.title}" vẫn chưa hoàn thành. Sếp ${freshCurrentUser?.name || 'Quản lý'} đang chờ bạn, nhấn để cập nhật ngay!`
+      })
+    });
+    showToast(`Đã đôn đốc ${userName} thành công!`);
+  } catch (err) {
+    console.error(err);
+    showToast('Lỗi gửi nhắc nhở.');
+  }
+};
 
   const assignedUsersData = useMemo(() => {
     if (!task.assignedTo) return [];
