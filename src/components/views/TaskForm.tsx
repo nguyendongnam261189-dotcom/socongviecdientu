@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { ChevronLeft, Plus, Trash2, ChevronDown, ChevronRight, FileSpreadsheet, Upload, Search, UserMinus, ShieldAlert } from 'lucide-react';
+import { ChevronLeft, Plus, Trash2, Upload, Search, UserMinus, ShieldAlert, Calendar } from 'lucide-react';
 import { cn, getUserGrades } from '../../utils';
 import { TaskCategory, Role, Task } from '../../types';
 
@@ -26,15 +26,34 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
     return users.find(u => u.id === currentUser?.id) || currentUser;
   }, [users, currentUser]);
 
-  const [category, setCategory] = useState<TaskCategory>(initialTask?.category || 'task');
+  // CATEGORY & BASIC INFO
+  // Đảm bảo nếu sửa task cũ có dạng 'discussion' thì tự chuyển về 'task'
+  const [category, setCategory] = useState<TaskCategory>(
+    initialTask?.category && initialTask.category !== 'discussion' ? initialTask.category : 'task'
+  );
   const [title, setTitle] = useState(initialTask?.title || '');
   const [description, setDescription] = useState(initialTask?.description || '');
   
   const [notifyAgain, setNotifyAgain] = useState(false);
 
-  // LUẬT MỚI: Cờ xác định việc này có đánh giá tiến độ chung hay không
+  // LUẬT MỚI: Cờ xác định việc này có đánh giá tiến độ chung hay không (Chỉ áp dụng cho Task)
   const [isOfficial, setIsOfficial] = useState(initialTask?.isOfficial !== false); 
 
+  // DEADLINE: Áp dụng cho cả 3 loại (Task, Announcement, Poll)
+  const [deadline, setDeadline] = useState(initialTask?.deadline ? new Date(initialTask.deadline).toISOString().slice(0, 16) : new Date(Date.now() + 86400000).toISOString().slice(0, 16));
+  const [hasDeadline, setHasDeadline] = useState(!!initialTask?.deadline || !initialTask);
+
+  // MẪU THU THẬP SỐ LIỆU (Chỉ dành cho Task)
+  const [reportTemplateEnabled, setReportTemplateEnabled] = useState(!!initialTask?.reportTemplate);
+  const [reportTemplateFields, setReportTemplateFields] = useState<{id: string, label: string, type: 'text' | 'number', required: boolean}[]>(
+    (initialTask?.reportTemplate as any) || [ { id: 'field-1', label: 'Nhập số liệu', type: 'number', required: false } ]
+  );
+  
+  // KHẢO SÁT (Chỉ dành cho Poll)
+  const [pollOptions, setPollOptions] = useState<string[]>(initialTask?.pollOptions?.map(o => o.text) || ['', '']);
+  const [pollMultipleChoice, setPollMultipleChoice] = useState(initialTask?.pollMultipleChoice || false);
+  
+  // TARGETING
   const [targetType, setTargetType] = useState<'all' | 'specific' | 'individual'>(() => {
     if (initialTask) {
        if (initialTask.assignedTo.length > 0 && initialTask.assignedTo.length < users.length) {
@@ -58,18 +77,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
   const [excludedUsers, setExcludedUsers] = useState<string[]>(initialTask?.excludedUsers || []);
   const [excludeMe, setExcludeMe] = useState(false);
   const [showExclusionList, setShowExclusionList] = useState(false);
-
-  const [deadline, setDeadline] = useState(initialTask?.deadline ? new Date(initialTask.deadline).toISOString().slice(0, 16) : new Date(Date.now() + 86400000).toISOString().slice(0, 16));
-  const [hasDeadline, setHasDeadline] = useState(!!initialTask?.deadline || !initialTask);
   
-  const [reportTemplateEnabled, setReportTemplateEnabled] = useState(!!initialTask?.reportTemplate);
-  const [reportTemplateFields, setReportTemplateFields] = useState<{id: string, label: string, type: 'text' | 'number' | 'file', required: boolean}[]>(initialTask?.reportTemplate || [
-      { id: 'field-1', label: 'Nhập số liệu', type: 'number', required: false }
-  ]);
-  
-  const [pollOptions, setPollOptions] = useState<string[]>(initialTask?.pollOptions?.map(o => o.text) || ['', '']);
-  const [pollMultipleChoice, setPollMultipleChoice] = useState(initialTask?.pollMultipleChoice || false);
-  
+  // ATTACHMENTS
   const [attachments, setAttachments] = useState<{ title: string; url: string; category?: string }[]>(initialTask?.attachments || []);
   const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
   const [isUploading, setIsUploading] = useState(false);
@@ -239,7 +248,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
       assignedTo: finalAssignedTo,
       excludedUsers: finalExcluded,
       visibility: 'private', 
-      isOfficial: isOfficial, // LƯU CỜ ĐÁNH GIÁ TIẾN ĐỘ VÀO DỮ LIỆU
+      // Ép kiểu: Chỉ có Công việc (task) mới được tính vào Đánh giá tiến độ
+      isOfficial: category === 'task' ? isOfficial : false, 
       createdBy: freshCurrentUser?.id || '',
       attachments: attachments.filter(a => a.title.trim() && a.url.trim()),
     };
@@ -254,10 +264,11 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
       newTaskParams.targetGrades = [];
     }
     
-    if (hasDeadline && deadline && category === 'task') {
+    if (hasDeadline && deadline) {
       newTaskParams.deadline = new Date(deadline).toISOString();
     }
     
+    // Lưu Report Template (Chỉ nếu là task)
     if (category === 'task') {
       if (reportTemplateEnabled) {
         const validFields = reportTemplateFields.filter(f => f.label.trim() !== '');
@@ -267,6 +278,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
       }
     }
     
+    // Lưu Poll (Chỉ nếu là Poll)
     if (category === 'poll') {
       newTaskParams.pollOptions = pollOptions.filter(o => o.trim() !== '').map((text, idx) => ({ id: `opt-${idx}`, text, votes: [] }));
       newTaskParams.pollMultipleChoice = pollMultipleChoice;
@@ -302,7 +314,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
           },
           body: JSON.stringify({
             tokens: uniqueTokens,
-            title: initialTask ? `Đã cập nhật: ${title}` : `Công việc mới: ${title}`,
+            title: initialTask ? `Đã cập nhật: ${title}` : `Nội dung mới: ${title}`,
             body: description || 'Bạn có một công việc/thông báo mới trên hệ thống.'
           })
         }).catch(err => console.error("Lỗi gửi notify:", err));
@@ -317,8 +329,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
   const categories: { value: TaskCategory, label: string }[] = [
     { value: 'task', label: 'Công Việc' },
     { value: 'announcement', label: 'Thông Báo' },
-    { value: 'poll', label: 'Khảo Sát' },
-    { value: 'discussion', label: 'Thảo Luận' },
+    { value: 'poll', label: 'Khảo Sát' }
   ];
 
   return (
@@ -348,77 +359,80 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
             </div>
           )}
 
-          {/* Category */}
-          <div className="space-y-3">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Loại</label>
-            <div className="grid grid-cols-2 gap-2">
-              {categories.map(cat => (
-                <button
-                  key={cat.value}
-                  type="button"
-                  onClick={() => setCategory(cat.value)}
-                  className={cn(
-                    "p-3 rounded-xl border text-sm font-bold transition-all",
-                    category === cat.value 
-                      ? "bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm" 
-                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                  )}
-                >
-                  {cat.label}
-                </button>
-              ))}
-            </div>
+          {/* Phân loại (Category) - Chỉ còn 3 Tab */}
+          <div className="flex bg-slate-200/60 p-1.5 rounded-2xl gap-1.5 shadow-inner">
+            {categories.map(cat => (
+              <button
+                key={cat.value}
+                type="button"
+                onClick={() => setCategory(cat.value)}
+                className={cn(
+                  "flex-1 py-2.5 rounded-xl text-sm font-bold transition-all",
+                  category === cat.value 
+                    ? "bg-white text-indigo-700 shadow-sm" 
+                    : "text-slate-500 hover:bg-white/50"
+                )}
+              >
+                {cat.label}
+              </button>
+            ))}
           </div>
 
           <div className="space-y-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+            {/* Tiêu đề & Nội dung */}
             <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Tiêu đề *</label>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Tiêu đề *</label>
               <input
                 type="text"
                 required
                 value={title}
                 onChange={e => setTitle(e.target.value)}
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all placeholder:font-normal"
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all placeholder:font-normal"
                 placeholder="Nhập tiêu đề..."
               />
             </div>
             
             <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Nội dung chi tiết</label>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Nội dung chi tiết</label>
               <textarea
                 rows={4}
                 value={description}
                 onChange={e => setDescription(e.target.value)}
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all resize-none"
-                placeholder="Nhập mô tả cụ thể..."
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all resize-none"
+                placeholder={category === 'task' ? "Nhập chi tiết nhiệm vụ (Hoặc dán Link Google Drive/Form để thu bài tại đây)..." : "Nhập nội dung chi tiết..."}
               />
             </div>
 
+            {/* DEADLINE (CHO CẢ 3 LOẠI) */}
+            <div className="pt-2 border-t border-slate-100 mt-2">
+              <label className="flex items-center gap-2 text-sm font-bold text-slate-700 cursor-pointer mb-2">
+                <input 
+                  type="checkbox" 
+                  checked={hasDeadline} 
+                  onChange={e => setHasDeadline(e.target.checked)}
+                  className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 border-slate-300"
+                />
+                {category === 'announcement' ? 'Có thời hạn (Ngày diễn ra/Hạn xem)' : 'Có thời hạn (Deadline)'}
+              </label>
+              {hasDeadline && (
+                <div className="flex items-center gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus-within:border-indigo-400 transition-colors">
+                  <Calendar className="w-4 h-4 text-indigo-500 ml-1" />
+                  <input
+                    type="datetime-local"
+                    value={deadline}
+                    onChange={e => setDeadline(e.target.value)}
+                    className="flex-1 bg-transparent text-slate-800 text-sm font-bold focus:outline-none"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* MẪU THU THẬP & ĐÁNH GIÁ TIẾN ĐỘ (CHỈ DÀNH CHO CÔNG VIỆC) */}
             {category === 'task' && (
               <>
-                <div className="flex items-center gap-4 pt-2">
-                  <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                    <input 
-                      type="checkbox" 
-                      checked={hasDeadline} 
-                      onChange={e => setHasDeadline(e.target.checked)}
-                      className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 border-slate-300"
-                    />
-                    Có thời hạn (Deadline)
-                  </label>
-                  {hasDeadline && (
-                    <input
-                      type="datetime-local"
-                      value={deadline}
-                      onChange={e => setDeadline(e.target.value)}
-                      className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 text-sm font-medium focus:ring-2 focus:ring-indigo-100 outline-none"
-                    />
-                  )}
-                </div>
-                
                 <div className="pt-4 border-t border-slate-100 mt-2 space-y-4">
                  <div>
-                   <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
+                   <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2 cursor-pointer">
                      <input 
                        type="checkbox" 
                        checked={reportTemplateEnabled} 
@@ -429,7 +443,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                    </label>
                    {reportTemplateEnabled && (
                      <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl space-y-2">
-                       <p className="text-[11px] text-slate-400 mb-2">Định nghĩa các cột dữ liệu người nhận cần điền (như file Excel). Hệ thống sẽ tự tạo bảng nhập liệu cho họ và tổng hợp tự động.</p>
+                       <p className="text-[11px] text-slate-400 mb-2 font-medium">Định nghĩa các cột dữ liệu người nhận cần điền. Hệ thống sẽ tự tạo bảng nhập liệu cho họ và tổng hợp tự động.</p>
                        {reportTemplateFields.map((field, idx) => (
                          <div key={field.id} className="flex gap-2 items-center">
                            <input
@@ -441,20 +455,20 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                                setReportTemplateFields(newFields);
                              }}
                              placeholder="Tên trường (VD: Sĩ số, Ghi chú)"
-                             className="flex-1 p-2 border border-slate-300 rounded text-sm outline-none focus:border-indigo-400"
+                             className="flex-1 p-2 bg-white border border-slate-300 rounded text-sm outline-none focus:border-indigo-400 shadow-sm"
                            />
+                           {/* Đã xóa <option value="file"> */}
                            <select 
                              value={field.type}
                              onChange={e => {
                                const newFields = [...reportTemplateFields];
-                               newFields[idx].type = e.target.value as 'text' | 'number' | 'file';
+                               newFields[idx].type = e.target.value as 'text' | 'number';
                                setReportTemplateFields(newFields);
                              }}
-                             className="p-2 border border-slate-300 rounded text-sm outline-none"
+                             className="p-2 bg-white border border-slate-300 rounded text-sm outline-none shadow-sm"
                            >
                              <option value="text">Chữ (Text)</option>
                              <option value="number">Số (Number)</option>
-                             <option value="file">File/Ảnh</option>
                            </select>
                            <label className="flex items-center gap-1 text-xs text-slate-600">
                              <input 
@@ -469,7 +483,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                            </label>
                            <button type="button" onClick={() => {
                              setReportTemplateFields(prev => prev.filter((_, i) => i !== idx));
-                           }} className="p-2 text-slate-400 hover:text-rose-500">
+                           }} className="p-2 text-slate-400 hover:text-rose-500 transition-colors">
                              <Trash2 className="w-4 h-4" />
                            </button>
                          </div>
@@ -477,52 +491,51 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                        <button
                          type="button"
                          onClick={() => setReportTemplateFields(prev => [...prev, { id: `field-${Date.now()}`, label: '', type: 'text', required: false }])}
-                         className="flex items-center gap-2 text-indigo-600 text-xs font-bold mt-2 font-medium hover:underline"
+                         className="flex items-center gap-1 text-indigo-600 text-xs font-bold mt-2 hover:text-indigo-800 transition-colors"
                        >
                          <Plus className="w-4 h-4"/> Thêm cột
                        </button>
                      </div>
                    )}
                  </div>
-              </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 mt-4">
+                  <label className={cn("flex items-start gap-3 p-3 border rounded-xl cursor-pointer transition-colors", isOfficial ? "bg-indigo-50/50 border-indigo-200 hover:bg-indigo-50" : "bg-slate-50 border-slate-200 hover:bg-slate-100")}>
+                    <input 
+                      type="checkbox" 
+                      checked={isOfficial} 
+                      onChange={e => setIsOfficial(e.target.checked)}
+                      className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 border-slate-300"
+                    />
+                    <div>
+                      <div className={cn("text-sm font-bold", isOfficial ? "text-indigo-900" : "text-slate-700")}>Có đánh giá tiến độ</div>
+                      <div className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                        <b className={isOfficial ? "text-indigo-600" : ""}>Đang Bật:</b> Hiện trên bảng Thống kê chung của trường.<br/>
+                        <b>Tắt:</b> Việc nội bộ. Ai nhận việc nấy thấy (Admin/BGH không thấy).
+                      </div>
+                    </div>
+                  </label>
+                </div>
               </>
             )}
 
-            {/* NÚT ĐÁNH GIÁ TIẾN ĐỘ CHUNG */}
-            <div className="pt-4 border-t border-slate-100 mt-4">
-              <label className={cn("flex items-start gap-3 p-3 border rounded-xl cursor-pointer transition-colors", isOfficial ? "bg-indigo-50/50 border-indigo-200 hover:bg-indigo-50" : "bg-slate-50 border-slate-200 hover:bg-slate-100")}>
-                <input 
-                  type="checkbox" 
-                  checked={isOfficial} 
-                  onChange={e => setIsOfficial(e.target.checked)}
-                  className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 border-slate-300"
-                />
-                <div>
-                  <div className={cn("text-sm font-bold", isOfficial ? "text-indigo-900" : "text-slate-700")}>Có đánh giá tiến độ</div>
-                  <div className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-                    <b className={isOfficial ? "text-indigo-600" : ""}>Đang Bật:</b> Hiện trên bảng Thống kê chung của trường.<br/>
-                    <b>Tắt:</b> Việc nội bộ. Ai nhận việc nấy thấy (Admin/BGH không thấy).
-                  </div>
-                </div>
-              </label>
-            </div>
-
           </div>
 
-          {/* POLL FIELDS */}
+          {/* KHẢO SÁT FIELDS (CHỈ POLL) */}
           {category === 'poll' && (
             <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Các lựa chọn khảo sát</label>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Các lựa chọn khảo sát</label>
               {pollOptions.map((opt, idx) => (
                 <div key={idx} className="flex gap-2">
                   <input
                     type="text"
                     value={opt}
                     onChange={e => handlePollOptionChange(idx, e.target.value)}
-                    className="flex-1 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none"
+                    className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all shadow-sm"
                     placeholder={`Lựa chọn ${idx + 1}`}
                   />
-                  <button type="button" onClick={() => handleRemovePollOption(idx)} className="p-2.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors">
+                  <button type="button" onClick={() => handleRemovePollOption(idx)} className="p-3 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-colors">
                     <Trash2 className="w-5 h-5" />
                   </button>
                 </div>
@@ -530,13 +543,13 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
               <button
                 type="button"
                 onClick={handleAddPollOption}
-                className="flex items-center justify-center gap-2 w-full p-2.5 rounded-lg border border-dashed border-slate-300 text-sm font-bold text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 transition-colors mt-2"
+                className="flex items-center justify-center gap-2 w-full py-3 rounded-xl border border-dashed border-indigo-200 text-sm font-bold text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 transition-colors mt-2"
               >
                 <Plus className="w-4 h-4" /> Thêm lựa chọn
               </button>
               
               <div className="mt-4 pt-4 border-t flex items-center justify-between">
-                <span className="text-sm font-bold text-slate-700">Cho phép chọn nhiều</span>
+                <span className="text-sm font-bold text-slate-700">Cho phép chọn nhiều phương án</span>
                 <button
                   type="button"
                   onClick={() => setPollMultipleChoice(!pollMultipleChoice)}
@@ -557,15 +570,15 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
           {/* TARGETING SPECIFIC USERS */}
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4">
              <div className="flex items-center justify-between">
-               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Người nhận</label>
+               <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Người nhận</label>
                 <select
                    value={targetType}
                    onChange={e => setTargetType(e.target.value as 'all' | 'specific' | 'individual')}
-                   className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 text-sm font-medium outline-none"
+                   className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-indigo-600 text-sm font-bold outline-none"
                  >
                    {freshCurrentUser?.role === 'admin' && <option value="all">Tất cả mọi người</option>}
-                   <option value="specific">Chỉ định nhóm cụ thể</option>
-                   <option value="individual">Chọn từng người</option>
+                   <option value="specific">Chỉ định theo Tổ/Nhóm</option>
+                   <option value="individual">Chọn từng cá nhân</option>
                  </select>
              </div>
              
@@ -574,14 +587,14 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                  {/* Roles - BGH only */}
                  {freshCurrentUser?.role === 'admin' && (
                    <div>
-                     <span className="text-[11px] font-bold text-slate-400 uppercase mb-2 block">Theo chức vụ</span>
+                     <span className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Theo chức vụ</span>
                      <div className="flex flex-wrap gap-2">
                        {(['admin', 'leader', 'teacher'] as Role[]).map(role => (
                          <button
                            key={role}
                            type="button"
                            onClick={() => toggleArrayItem(selectedRoles, setSelectedRoles, role)}
-                           className={cn("px-3 py-1.5 rounded-full text-xs font-bold transition-all border", selectedRoles.includes(role) ? "bg-indigo-100 border-indigo-200 text-indigo-700" : "bg-slate-50 text-slate-600")}
+                           className={cn("px-4 py-2 rounded-full text-xs font-bold transition-all border shadow-sm", selectedRoles.includes(role) ? "bg-indigo-100 border-indigo-200 text-indigo-700" : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100")}
                          >
                            {role === 'admin' ? 'BGH' : role === 'leader' ? 'Tổ trưởng' : 'Giáo viên'}
                          </button>
@@ -593,14 +606,14 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                  {/* Departments */}
                  {availableDepartments.length > 0 && (
                    <div>
-                     <span className="text-[11px] font-bold text-slate-400 uppercase mb-2 block">Theo tổ chuyên môn</span>
+                     <span className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Theo tổ chuyên môn</span>
                      <div className="flex flex-wrap gap-2">
                        {availableDepartments.map(dept => (
                          <button
                            key={dept}
                            type="button"
                            onClick={() => toggleArrayItem(selectedDepartments, setSelectedDepartments, dept)}
-                           className={cn("px-3 py-1.5 rounded-full text-xs font-bold transition-all border", selectedDepartments.includes(dept) ? "bg-amber-100 border-amber-200 text-amber-700" : "bg-slate-50 text-slate-600")}
+                           className={cn("px-4 py-2 rounded-full text-xs font-bold transition-all border shadow-sm", selectedDepartments.includes(dept) ? "bg-amber-100 border-amber-200 text-amber-800" : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100")}
                          >
                            {dept}
                          </button>
@@ -612,14 +625,14 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                  {/* Khối / Nhóm kiêm nhiệm */}
                  {availableGrades.length > 0 && (
                    <div>
-                     <span className="text-[11px] font-bold text-slate-400 uppercase mb-2 block">Theo khối / nhóm kiêm nhiệm</span>
+                     <span className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Theo khối / nhóm kiêm nhiệm</span>
                      <div className="flex flex-wrap gap-2">
                        {availableGrades.map(grade => (
                          <button
                            key={grade}
                            type="button"
                            onClick={() => toggleArrayItem(selectedGrades, setSelectedGrades, grade)}
-                           className={cn("px-3 py-1.5 rounded-full text-xs font-bold transition-all border", selectedGrades.includes(grade) ? "bg-emerald-100 border-emerald-200 text-emerald-700" : "bg-slate-50 text-slate-600")}
+                           className={cn("px-4 py-2 rounded-full text-xs font-bold transition-all border shadow-sm", selectedGrades.includes(grade) ? "bg-emerald-100 border-emerald-200 text-emerald-800" : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100")}
                          >
                            {grade}
                          </button>
@@ -647,10 +660,10 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                      value={userSearchQuery}
                      onChange={e => setUserSearchQuery(e.target.value)}
                      placeholder="Tìm kiếm theo tên, tổ, nhóm..."
-                     className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-100 transition-all"
+                     className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all"
                    />
                  </div>
-                 <div className="max-h-[300px] overflow-y-auto space-y-1 border border-slate-200 rounded-xl p-2 bg-slate-50">
+                 <div className="max-h-[300px] overflow-y-auto space-y-1 border border-slate-200 rounded-xl p-2 bg-slate-50 shadow-inner">
                    {availableUsers.filter(u => {
                      const uGrades = getUserGrades(u.grade).filter(g => g && g.trim() !== '');
                      return u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) || 
@@ -659,7 +672,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                    }).map(u => {
                      const uGrades = getUserGrades(u.grade).filter(g => g && g.trim() !== '');
                      return (
-                     <label key={u.id} className="flex items-center gap-3 p-3 bg-white rounded-lg cursor-pointer border border-transparent hover:border-slate-200 transition-colors shadow-sm">
+                     <label key={u.id} className="flex items-center gap-3 p-3 bg-white rounded-lg cursor-pointer border border-transparent hover:border-indigo-100 transition-colors shadow-sm">
                        <input 
                          type="checkbox" 
                          checked={selectedUsers.includes(u.id)}
@@ -667,8 +680,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                          className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 border-slate-300"
                        />
                        <div className="flex-1 min-w-0">
-                         <div className="text-sm font-medium text-slate-800 truncate">{u.name}</div>
-                         <div className="text-[11px] text-slate-500 truncate">
+                         <div className="text-sm font-bold text-slate-800 truncate">{u.name}</div>
+                         <div className="text-[10px] text-slate-500 truncate mt-0.5">
                            {u.department || 'Chưa phân bổ'}
                            <span className="text-emerald-600 font-medium">
                              {' • ' + (uGrades.length > 0 ? uGrades.join(', ') : 'Chưa phân công')}
@@ -736,77 +749,54 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
              )}
 
              {/* NÚT LOẠI TRỪ TÔI */}
-             <label className="flex items-center gap-2 mt-2 cursor-pointer p-2 hover:bg-slate-50 rounded-lg transition-colors border border-transparent hover:border-slate-200">
-               <input 
-                 type="checkbox" 
-                 checked={excludeMe} 
-                 onChange={e => setExcludeMe(e.target.checked)} 
-                 className="rounded text-rose-500 focus:ring-rose-500 w-4 h-4 border-slate-300" 
-               />
-               <span className="text-xs font-bold text-slate-600">Loại trừ tôi khỏi danh sách thực hiện (Tôi chỉ tạo việc)</span>
-             </label>
-
+             <div className="pt-2 border-t border-slate-100">
+               <label className="flex items-center gap-2 cursor-pointer p-2 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-100">
+                 <input 
+                   type="checkbox" 
+                   checked={excludeMe} 
+                   onChange={e => setExcludeMe(e.target.checked)} 
+                   className="rounded text-rose-500 focus:ring-rose-500 w-4 h-4 border-slate-300" 
+                 />
+                 <span className="text-xs font-bold text-slate-600">Loại trừ tôi khỏi danh sách nhận việc (Tôi chỉ tạo việc)</span>
+               </label>
+             </div>
           </div>
 
           {/* ATTACHMENTS */}
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Tệp & Tài liệu đính kèm</label>
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+             <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Tệp & Tài liệu đính kèm</label>
              {attachments.map((att, idx) => (
-                <div key={idx} className="flex flex-col gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                  <div className="flex gap-2 items-start">
-                    <div className="flex-1 space-y-2">
-                      <input
-                        type="text"
-                        value={att.title}
-                        onChange={e => handleAttachmentChange(idx, 'title', e.target.value)}
-                        className="w-full text-sm bg-transparent border-b border-slate-300 px-1 py-1 outline-none focus:border-indigo-400 placeholder:text-slate-400"
-                        placeholder="Tên tài liệu..."
-                      />
-                      <input
-                        type="text"
-                        value={att.url}
-                        onChange={e => handleAttachmentChange(idx, 'url', e.target.value)}
-                        className="w-full text-[11px] bg-transparent border-b border-slate-300 px-1 py-1 outline-none focus:border-indigo-400 text-indigo-600 placeholder:text-slate-400"
-                        placeholder="Link Google Drive, Website hoặc URL tài liệu..."
-                      />
-                     <div className="w-full text-xs font-semibold bg-emerald-50 border border-emerald-100 text-emerald-700 px-2 py-1.5 rounded-lg flex items-center">
-                        Phân loại: {att.category}
-                     </div>
-                    </div>
-                    <button type="button" onClick={() => handleRemoveAttachment(idx)} className="p-2 text-slate-400 hover:text-rose-500 rounded-lg transition-colors">
-                      <Trash2 className="w-5 h-5" />
-                    </button>
+                <div key={idx} className="flex items-center gap-3 bg-slate-50 p-2.5 rounded-xl border border-slate-200 shadow-sm">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-slate-700 truncate mb-0.5">{att.title}</p>
+                    <span className="text-[9px] px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded font-bold">{att.category || 'Khác'}</span>
                   </div>
+                  <button type="button" onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))} className="p-2 bg-white rounded-lg text-rose-500 hover:bg-rose-50 border border-slate-200 transition-colors">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               ))}
               
               {Object.entries(uploadProgress).map(([fileName, progress]) => (
-                <div key={fileName} className="text-xs font-medium text-emerald-600 bg-emerald-50 p-2 rounded-lg border border-emerald-100 flex justify-between items-center">
-                  <span className="truncate pr-2.5">Đang tải: {fileName}</span>
+                <div key={fileName} className="text-xs font-bold text-indigo-600 bg-indigo-50 p-2.5 rounded-xl border border-indigo-100 flex justify-between items-center shadow-sm">
+                  <span className="truncate pr-2">Đang tải: {fileName}</span>
                   <span>{progress}%</span>
                 </div>
               ))}
 
-              <div className="flex flex-col gap-2 mt-4 pt-3 border-t border-slate-100">
-                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">CHỌN NHÓM TRƯỚC KHI TẢI LÊN</label>
-                <div className="flex gap-2">
-                  <select
-                    value={uploadCategory}
-                    onChange={e => setUploadCategory(e.target.value)}
-                    className="flex-1 text-sm font-semibold bg-slate-50 border border-slate-200 text-slate-700 px-3 py-2 rounded-xl outline-none focus:border-indigo-400 focus:bg-white transition-colors"
-                  >
-                    {documentCategories.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                  
-                  <label className={`flex-[1.5] flex items-center justify-center gap-2 p-2 rounded-xl border border-dashed border-slate-300 text-sm font-bold transition-colors ${isUploading ? 'text-slate-400 cursor-not-allowed bg-slate-50' : 'text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 cursor-pointer'}`}>
-                    <Upload className="w-4 h-4" /> {isUploading ? 'Đang tải...' : 'Tải lên Drive'}
-                    <input type="file" className="hidden" multiple onChange={handleFileUpload} disabled={isUploading} />
-                  </label>
-                </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <select 
+                  value={uploadCategory} 
+                  onChange={e => setUploadCategory(e.target.value)} 
+                  className="text-xs font-bold bg-slate-50 border border-slate-200 p-3 rounded-xl outline-none focus:border-indigo-400 transition-colors"
+                >
+                  {documentCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <label className={cn("flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed border-slate-300 text-xs font-bold transition-all", isUploading ? "text-slate-400 bg-slate-50 cursor-not-allowed" : "text-indigo-600 bg-white hover:bg-indigo-50 hover:border-indigo-300 cursor-pointer shadow-sm")}>
+                  <Upload className="w-4 h-4" /> {isUploading ? 'Đang xử lý...' : 'Tải tài liệu lên'}
+                  <input type="file" className="hidden" onChange={handleFileUpload} disabled={isUploading} />
+                </label>
               </div>
-
           </div>
 
           <div className="pt-4 pb-12">
@@ -814,9 +804,9 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
               type="submit"
               disabled={isUploading}
               form="create-task-form"
-              className={`w-full text-white font-bold py-4 rounded-xl shadow-lg transition-all ${isUploading ? 'bg-slate-400 cursor-not-allowed' : 'bg-slate-800 hover:bg-slate-700 hover:translate-y-[-1px] active:translate-y-[1px]'}`}
+              className={`w-full text-white font-bold py-4 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 ${isUploading ? 'bg-slate-400 cursor-not-allowed' : 'bg-slate-800 hover:bg-slate-700 active:scale-[0.98]'}`}
             >
-              {initialTask ? 'Lưu Thay Đổi' : 'Tạo Nội Dung Mới'}
+              {initialTask ? 'LƯU THAY ĐỔI' : 'TẠO NỘI DUNG MỚI'}
             </button>
           </div>
           
