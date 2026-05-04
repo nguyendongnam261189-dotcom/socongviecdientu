@@ -35,10 +35,11 @@ export const StatisticsView: React.FC = () => {
     );
   }
 
-  // Filter tasks based on date range and only category 'task' for accurate tracking
+  // Filter tasks based on date range and ONLY count Official Tasks
   const filteredTasks = useMemo(() => {
     return tasks.filter(t => {
       if (t.category !== 'task') return false;
+      if (t.isOfficial === false) return false; // LUẬT MỚI: Bỏ qua việc nội bộ không tính thi đua
       const tDate = parseISO(t.createdAt);
       if (startDate && isBefore(tDate, startOfDay(parseISO(startDate)))) return false;
       if (endDate && isAfter(tDate, endOfDay(parseISO(endDate)))) return false;
@@ -56,7 +57,7 @@ export const StatisticsView: React.FC = () => {
       const assignedUsers = users.filter(u => isUserAssigned(t, u));
 
       if (assignedUsers.length > 0) {
-        totalAssigned++; // ĐÃ SỬA LỖI: Đếm theo Task (1 Task = 1 Việc), thay vì đếm theo User
+        totalAssigned++; // Đếm theo Task (1 Task = 1 Việc)
         
         const isGlobalDone = t.status === 'done';
         
@@ -72,7 +73,7 @@ export const StatisticsView: React.FC = () => {
           if (t.deadline && isPast(parseISO(t.deadline))) {
             overdue++;
           }
-          if ((t as any).reportTemplate || t.dataCollection?.enabled) {
+          if (t.reportTemplate && t.reportTemplate.length > 0) {
             missingReport++;
           }
         }
@@ -122,7 +123,7 @@ export const StatisticsView: React.FC = () => {
         }
       });
 
-      // ĐÃ SỬA LỖI: Chỉ tăng +1 cho Tổ đó, dù trong Tổ có bao nhiêu người được giao Task này
+      // Chỉ tăng +1 cho Tổ đó, dù trong Tổ có bao nhiêu người được giao Task này
       involvedDepts.forEach(deptName => {
         const stat = deps.get(deptName);
         if (stat) {
@@ -184,7 +185,7 @@ export const StatisticsView: React.FC = () => {
     });
     const ws2 = XLSX.utils.json_to_sheet(teacherStats);
 
-    // Logic cho Sheet 3: Chi tiết Công việc
+    // Logic cho Sheet 3: Chi tiết Công việc (Sửa lại check reportTemplate)
     const taskDetails = filteredTasks.map(t => {
       const assignedNames = users.filter(u => isUserAssigned(t, u)).map(u => u.name).join(', ');
 
@@ -192,7 +193,7 @@ export const StatisticsView: React.FC = () => {
         'Tên công việc': t.title,
         'Mô tả': t.description,
         'Trạng thái chung': t.status === 'done' ? 'Hoàn thành' : t.status === 'doing' ? 'Đang làm' : 'Chưa làm',
-        'Là báo cáo?': (t as any).reportTemplate || t.dataCollection?.enabled ? 'Có' : 'Không',
+        'Là báo cáo?': t.reportTemplate && t.reportTemplate.length > 0 ? 'Có' : 'Không',
         'Ngày tạo': format(parseISO(t.createdAt), 'dd/MM/yyyy HH:mm'),
         'Hạn chót': t.deadline ? format(parseISO(t.deadline), 'dd/MM/yyyy') : 'Không có',
         'Số người được giao': assignedNames.split(',').filter(x=>x).length,
