@@ -1,18 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { ChevronLeft, Plus, Trash2, ChevronDown, ChevronRight, FileSpreadsheet, Upload, Search } from 'lucide-react';
+import { ChevronLeft, Plus, Trash2, ChevronDown, ChevronRight, FileSpreadsheet, Upload, Search, UserMinus } from 'lucide-react';
 import { cn, getUserGrades } from '../../utils';
 import { TaskCategory, Role, Task } from '../../types';
 
-// Hàm làm sạch tên Folder (Biến Tiếng Việt có dấu thành không dấu, thay khoảng trắng bằng dấu gạch dưới)
 const sanitizeFolderName = (str: string) => {
   if (!str) return 'Khac';
   return str
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // Bỏ dấu
-    .replace(/đ/g, "d").replace(/Đ/g, "D") // Đổi chữ đ
-    .replace(/\s+/g, '_') // Thay khoảng trắng bằng dấu _
-    .replace(/[^a-zA-Z0-9_]/g, ''); // Loại bỏ các ký tự đặc biệt
+    .replace(/[\u0300-\u036f]/g, "") 
+    .replace(/đ/g, "d").replace(/Đ/g, "D") 
+    .replace(/\s+/g, '_') 
+    .replace(/[^a-zA-Z0-9_]/g, ''); 
 };
 
 interface TaskFormProps {
@@ -28,10 +27,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
   const [description, setDescription] = useState(initialTask?.description || '');
   
   const [notifyAgain, setNotifyAgain] = useState(false);
-
   const [visibility, setVisibility] = useState<'public' | 'private'>(initialTask?.visibility || 'public');
 
-  // Targeting
   const [targetType, setTargetType] = useState<'all' | 'specific' | 'individual'>(() => {
     if (initialTask) {
        if (initialTask.assignedTo.length > 0 && initialTask.assignedTo.length < users.length) {
@@ -40,7 +37,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
          }
          if (initialTask.assignedTo.length > 0) return 'individual';
        }
-       if (initialTask.assignedTo.length === 0) return 'specific'; // no users selected but not "all" exactly
+       if (initialTask.assignedTo.length === 0) return 'specific'; 
        return 'all';
     }
     return 'all';
@@ -48,10 +45,15 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
   
   const [selectedRoles, setSelectedRoles] = useState<Role[]>((initialTask?.targetRoles as Role[]) || []);
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>(initialTask?.targetDepartments || []);
-  const [selectedGrades, setSelectedGrades] = useState<string[]>(initialTask?.targetGrades || []); // ĐÃ HỢP NHẤT: Khối + Nhóm kiêm nhiệm
+  const [selectedGrades, setSelectedGrades] = useState<string[]>(initialTask?.targetGrades || []); 
   const [selectedUsers, setSelectedUsers] = useState<string[]>(initialTask?.assignedTo || []);
   const [userSearchQuery, setUserSearchQuery] = useState('');
   
+  // TÍNH NĂNG MỚI: DANH SÁCH LOẠI TRỪ
+  const [excludedUsers, setExcludedUsers] = useState<string[]>(initialTask?.excludedUsers || []);
+  const [excludeMe, setExcludeMe] = useState(false);
+  const [showExclusionList, setShowExclusionList] = useState(false);
+
   const [deadline, setDeadline] = useState(initialTask?.deadline ? new Date(initialTask.deadline).toISOString().slice(0, 16) : new Date(Date.now() + 86400000).toISOString().slice(0, 16));
   const [hasDeadline, setHasDeadline] = useState(!!initialTask?.deadline || !initialTask);
   
@@ -66,11 +68,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
   const [attachments, setAttachments] = useState<{ title: string; url: string; category?: string }[]>(initialTask?.attachments || []);
   const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
   const [isUploading, setIsUploading] = useState(false);
-  
-  // State mới: Lưu trữ danh mục người dùng chọn TRƯỚC KHI bấm tải file
   const [uploadCategory, setUploadCategory] = useState<string>(documentCategories[0] || 'Khác');
 
-  // Lấy ra tất cả các Khối / Nhóm kiêm nhiệm hiện có trong hệ thống
   const allSystemGrades = Array.from(new Set([...contextGrades, ...users.flatMap(u => getUserGrades(u.grade))])).filter(Boolean).sort();
 
   const handleAddAttachment = () => {
@@ -97,13 +96,10 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
         setUploadProgress(prev => ({ ...prev, [fileName]: 50 }));
         
         try {
-          // XỬ LÝ ĐƯỜNG DẪN THÔNG MINH CHO GOOGLE DRIVE TẠI ĐÂY
           const safeGroupName = sanitizeFolderName(uploadCategory);
           const currentYear = new Date().getFullYear();
           const currentMonth = new Date().getMonth() + 1;
           const formattedMonth = currentMonth < 10 ? `0${currentMonth}` : currentMonth.toString();
-          
-          // Tạo đường dẫn chuẩn: QuanLyTruongHoc / Nam_2026 / Cong_van / Thang_05
           const folderPath = `QuanLyTruongHoc/Nam_${currentYear}/${safeGroupName}/Thang_${formattedMonth}`;
           
           const response = await fetch(gasUrl, {
@@ -121,7 +117,6 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
 
           const result = await response.json();
           if (result.url) {
-            // Khi thành công, tự động gán luôn uploadCategory vào file
             setAttachments(prev => [...prev, { title: file.name, url: result.url, category: uploadCategory }]);
           } else {
             throw new Error(result.error || 'Server không trả về URL');
@@ -176,29 +171,41 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
     setArr(prev => prev.includes(item) ? prev.filter(i => i !== item) : [...prev, item]);
   };
 
-  const resolveAssignedUsers = () => {
-    if (targetType === 'all') {
-      return users.map(u => u.id);
-    }
-    if (targetType === 'individual') {
-      return selectedUsers;
-    }
+  // Tính toán TẤT CẢ người nhận dự kiến (Chưa trừ người bị loại trừ)
+  const rawAssignedUsers = useMemo(() => {
+    if (targetType === 'all') return users;
+    if (targetType === 'individual') return users.filter(u => selectedUsers.includes(u.id));
+    
     return users.filter(u => {
-      const uGrades = getUserGrades(u.grade); // Lấy mảng Khối/Nhóm
+      const uGrades = getUserGrades(u.grade);
+      const uDept = typeof u.department === 'string' ? u.department : (Array.isArray(u.department) ? u.department[0] : 'Khác');
+      
       const matchRole = selectedRoles.length === 0 || selectedRoles.includes(u.role);
-      const matchDept = selectedDepartments.length === 0 || selectedDepartments.includes(u.department || '');
-      // Kiểm tra xem User có nằm trong Khối/Nhóm nào được tick chọn không
+      const matchDept = selectedDepartments.length === 0 || selectedDepartments.includes(uDept || '');
       const matchGrade = selectedGrades.length === 0 || selectedGrades.some(g => uGrades.includes(g));
+      
       return matchRole && matchDept && matchGrade;
-    }).map(u => u.id);
+    });
+  }, [targetType, users, selectedRoles, selectedDepartments, selectedGrades, selectedUsers]);
+
+  const toggleExcludeUser = (uid: string) => {
+    setExcludedUsers(prev => prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const assignedTo = resolveAssignedUsers();
     
-    if (!title.trim() || assignedTo.length === 0) {
-      alert('Vui lòng nhập tiêu đề và đảm bảo có người nhận (đã cấp quyền).');
+    // Tổng hợp danh sách loại trừ cuối cùng
+    let finalExcluded = [...excludedUsers];
+    if (excludeMe && currentUser && !finalExcluded.includes(currentUser.id)) {
+        finalExcluded.push(currentUser.id);
+    }
+    
+    // Gạn lọc danh sách người nhận thực tế
+    const finalAssignedTo = rawAssignedUsers.filter(u => !finalExcluded.includes(u.id)).map(u => u.id);
+    
+    if (!title.trim() || finalAssignedTo.length === 0) {
+      alert('Vui lòng nhập tiêu đề và đảm bảo có ít nhất 1 người nhận sau khi đã loại trừ.');
       return;
     }
 
@@ -215,7 +222,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
       description,
       status: 'todo',
       category,
-      assignedTo,
+      assignedTo: finalAssignedTo,
+      excludedUsers: finalExcluded, // LƯU DANH SÁCH ĐEN VÀO DATABASE
       visibility: category === 'task' ? visibility : 'public',
       createdBy: currentUser?.id || '',
       attachments: attachments.filter(a => a.title.trim() && a.url.trim()),
@@ -249,7 +257,6 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
       newTaskParams.pollMultipleChoice = pollMultipleChoice;
     }
 
-    // 1. Lưu vào Database
     if (initialTask) {
       editTask(initialTask.id, newTaskParams, notifyAgain);
       showToast('Cập nhật thành công!');
@@ -258,9 +265,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
       showToast('Tạo thành công!');
     }
     
-    // 2. Kích hoạt gửi thông báo
     try {
-      const targetedUsers = users.filter(u => assignedTo.includes(u.id));
+      const targetedUsers = users.filter(u => finalAssignedTo.includes(u.id));
       const validTokens: string[] = [];
 
       targetedUsers.forEach((u: any) => {
@@ -584,25 +590,23 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                  </div>
                  
                  {/* Khối / Nhóm kiêm nhiệm */}
-                 <div>
-                   <span className="text-[11px] font-bold text-slate-400 uppercase mb-2 block">Theo khối / nhóm kiêm nhiệm</span>
-                   <div className="flex flex-wrap gap-2">
-                     {allSystemGrades.map(grade => (
-                       <button
-                         key={grade}
-                         type="button"
-                         onClick={() => toggleArrayItem(selectedGrades, setSelectedGrades, grade)}
-                         className={cn("px-3 py-1.5 rounded-full text-xs font-bold transition-all border", selectedGrades.includes(grade) ? "bg-emerald-100 border-emerald-200 text-emerald-700" : "bg-slate-50 text-slate-600")}
-                       >
-                         {grade}
-                       </button>
-                     ))}
+                 {allSystemGrades.length > 0 && (
+                   <div>
+                     <span className="text-[11px] font-bold text-slate-400 uppercase mb-2 block">Theo khối / nhóm kiêm nhiệm</span>
+                     <div className="flex flex-wrap gap-2">
+                       {allSystemGrades.map(grade => (
+                         <button
+                           key={grade}
+                           type="button"
+                           onClick={() => toggleArrayItem(selectedGrades, setSelectedGrades, grade)}
+                           className={cn("px-3 py-1.5 rounded-full text-xs font-bold transition-all border", selectedGrades.includes(grade) ? "bg-emerald-100 border-emerald-200 text-emerald-700" : "bg-slate-50 text-slate-600")}
+                         >
+                           {grade}
+                         </button>
+                       ))}
+                     </div>
                    </div>
-                 </div>
-                 
-                 <div className="bg-blue-50 text-blue-800 text-xs p-3 rounded-lg border border-blue-100">
-                   Sẽ gửi đến: <b>{resolveAssignedUsers().length}</b> người dùng thỏa mãn TẤT CẢ các điều kiện trên.
-                 </div>
+                 )}
                </div>
              )}
 
@@ -656,11 +660,64 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                      </div>
                    )}
                  </div>
-                 <div className="bg-emerald-50 text-emerald-800 text-xs p-3 rounded-lg border border-emerald-100 font-medium">
-                   Sẽ gửi đến: <b>{resolveAssignedUsers().length}</b> người dùng.
-                 </div>
                </div>
              )}
+
+             {/* NÂNG CẤP: GIAO DIỆN XEM TRƯỚC VÀ LOẠI TRỪ (BLACKLIST) */}
+             {(targetType === 'all' || targetType === 'specific') && (
+                <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100 mt-2">
+                  <div className="flex justify-between items-center">
+                     <span className="text-indigo-800 text-xs">
+                       Sẽ gửi đến: <b>{rawAssignedUsers.filter(u => !excludedUsers.includes(u.id)).length}</b> người nhận.
+                     </span>
+                     <button 
+                       type="button" 
+                       onClick={() => setShowExclusionList(!showExclusionList)} 
+                       className="text-xs font-bold text-indigo-700 hover:text-indigo-900 transition-colors flex items-center gap-1"
+                     >
+                        <UserMinus className="w-3 h-3" />
+                        {showExclusionList ? 'Thu gọn' : 'Xem & Loại trừ'}
+                     </button>
+                  </div>
+                  
+                  {showExclusionList && (
+                     <div className="mt-3 bg-white border border-indigo-100 rounded-lg max-h-48 overflow-y-auto p-1 divide-y divide-slate-50 shadow-inner">
+                        {rawAssignedUsers.map(u => (
+                           <label key={u.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 cursor-pointer rounded-md transition-colors">
+                              <input 
+                                 type="checkbox" 
+                                 checked={!excludedUsers.includes(u.id)}
+                                 onChange={() => toggleExcludeUser(u.id)}
+                                 className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 border-slate-300"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className={cn("text-xs font-medium truncate transition-colors", excludedUsers.includes(u.id) ? "text-slate-400 line-through" : "text-slate-700")}>{u.name}</div>
+                                <div className="text-[10px] text-slate-400 truncate">{typeof u.department === 'string' ? u.department : 'Khác'}</div>
+                              </div>
+                           </label>
+                        ))}
+                     </div>
+                  )}
+                  {showExclusionList && excludedUsers.length > 0 && (
+                     <div className="mt-2 text-[10px] text-rose-600 font-medium flex items-center gap-1">
+                        <Trash2 className="w-3 h-3" />
+                        Đã loại trừ {excludedUsers.filter(id => rawAssignedUsers.some(u => u.id === id)).length} người. (Người bị loại trừ sẽ hoàn toàn không thấy thông báo này).
+                     </div>
+                  )}
+                </div>
+             )}
+
+             {/* NÚT LOẠI TRỪ TÔI (CHO BGH / TỔ TRƯỞNG GIAO VIỆC) */}
+             <label className="flex items-center gap-2 mt-2 cursor-pointer p-2 hover:bg-slate-50 rounded-lg transition-colors border border-transparent hover:border-slate-200">
+               <input 
+                 type="checkbox" 
+                 checked={excludeMe} 
+                 onChange={e => setExcludeMe(e.target.checked)} 
+                 className="rounded text-rose-500 focus:ring-rose-500 w-4 h-4 border-slate-300" 
+               />
+               <span className="text-xs font-bold text-slate-600">Loại trừ tôi khỏi danh sách thực hiện (Tôi chỉ tạo/đôn đốc, không nộp bài)</span>
+             </label>
+
           </div>
 
           {/* ATTACHMENTS */}
@@ -702,7 +759,6 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                 </div>
               ))}
 
-              {/* KHU VỰC UPLOAD FILE ĐÃ ĐƯỢC CẢI TIẾN */}
               <div className="flex flex-col gap-2 mt-4 pt-3 border-t border-slate-100">
                 <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">CHỌN NHÓM TRƯỚC KHI TẢI LÊN</label>
                 <div className="flex gap-2">
