@@ -7,7 +7,7 @@ export interface User {
   name: string;
   role: Role;
   department: string; 
-  grade: string | string[]; // ĐÃ NÂNG CẤP: Dùng chính trường Khối này làm mảng nhiều Nhóm/Khối
+  grade: string | string[]; 
   status: UserStatus;
   avatar?: string;
   phone?: string;
@@ -42,9 +42,10 @@ export interface Task {
   description: string;
   createdBy: string;
   assignedTo: string[]; // User IDs
+  excludedUsers?: string[]; // NÂNG CẤP: Danh sách đen (Người bị loại trừ/Cấm xem)
   targetRoles?: string[];
   targetDepartments?: string[];
-  targetGrades?: string[]; // Gửi theo Khối/Nhóm
+  targetGrades?: string[]; 
   deadline?: string; // ISO date string
 
   status?: TaskStatus;
