@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { ChevronLeft, Plus, Trash2, ChevronDown, ChevronRight, FileSpreadsheet, Upload, Search, UserMinus } from 'lucide-react';
+import { ChevronLeft, Plus, Trash2, ChevronDown, ChevronRight, FileSpreadsheet, Upload, Search, UserMinus, ShieldAlert } from 'lucide-react';
 import { cn, getUserGrades } from '../../utils';
 import { TaskCategory, Role, Task } from '../../types';
 
@@ -31,6 +31,9 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
   const [description, setDescription] = useState(initialTask?.description || '');
   
   const [notifyAgain, setNotifyAgain] = useState(false);
+
+  // LUẬT MỚI: Cờ xác định việc này có đánh giá tiến độ chung hay không
+  const [isOfficial, setIsOfficial] = useState(initialTask?.isOfficial !== false); 
 
   const [targetType, setTargetType] = useState<'all' | 'specific' | 'individual'>(() => {
     if (initialTask) {
@@ -99,10 +102,6 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
     });
   }, [freshCurrentUser, users]);
 
-  const handleAddAttachment = () => {
-    setAttachments(prev => [...prev, { title: '', url: '', category: documentCategories[0] || 'Khác' }]);
-  };
-
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -157,16 +156,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
         }
       };
       
-      reader.onerror = () => {
-        alert('Lỗi đọc nội dung file');
-        setIsUploading(false);
-        setUploadProgress(prev => { const n = {...prev}; delete n[fileName]; return n; });
-      };
-
       reader.readAsDataURL(file);
     } catch (error: any) {
-      console.error("Reader error:", error);
-      alert('Lỗi xử lý file: ' + error.message);
       setIsUploading(false);
       setUploadProgress(prev => { const n = {...prev}; delete n[fileName]; return n; });
     }
@@ -183,13 +174,11 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
   };
 
   const handleAddPollOption = () => setPollOptions(prev => [...prev, '']);
-  
   const handlePollOptionChange = (idx: number, val: string) => {
     const newOpts = [...pollOptions];
     newOpts[idx] = val;
     setPollOptions(newOpts);
   };
-  
   const handleRemovePollOption = (idx: number) => {
     setPollOptions(prev => prev.filter((_, i) => i !== idx));
   };
@@ -201,7 +190,6 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
   const rawAssignedUsers = useMemo(() => {
     if (targetType === 'all') return availableUsers; 
     if (targetType === 'individual') return users.filter(u => selectedUsers.includes(u.id));
-    
     if (selectedRoles.length === 0 && selectedDepartments.length === 0 && selectedGrades.length === 0) return [];
 
     return users.filter(u => {
@@ -250,7 +238,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
       category,
       assignedTo: finalAssignedTo,
       excludedUsers: finalExcluded,
-      visibility: 'private', // ÉP LUÔN LUÔN LÀ RIÊNG TƯ (CHỈ NGƯỜI NHẬN MỚI THẤY)
+      visibility: 'private', 
+      isOfficial: isOfficial, // LƯU CỜ ĐÁNH GIÁ TIẾN ĐỘ VÀO DỮ LIỆU
       createdBy: freshCurrentUser?.id || '',
       attachments: attachments.filter(a => a.title.trim() && a.url.trim()),
     };
@@ -498,6 +487,26 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
               </div>
               </>
             )}
+
+            {/* NÚT ĐÁNH GIÁ TIẾN ĐỘ CHUNG */}
+            <div className="pt-4 border-t border-slate-100 mt-4">
+              <label className={cn("flex items-start gap-3 p-3 border rounded-xl cursor-pointer transition-colors", isOfficial ? "bg-indigo-50/50 border-indigo-200 hover:bg-indigo-50" : "bg-slate-50 border-slate-200 hover:bg-slate-100")}>
+                <input 
+                  type="checkbox" 
+                  checked={isOfficial} 
+                  onChange={e => setIsOfficial(e.target.checked)}
+                  className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 border-slate-300"
+                />
+                <div>
+                  <div className={cn("text-sm font-bold", isOfficial ? "text-indigo-900" : "text-slate-700")}>Có đánh giá tiến độ</div>
+                  <div className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                    <b className={isOfficial ? "text-indigo-600" : ""}>Đang Bật:</b> Hiện trên bảng Thống kê chung của trường.<br/>
+                    <b>Tắt:</b> Việc nội bộ. Ai nhận việc nấy thấy (Admin/BGH không thấy).
+                  </div>
+                </div>
+              </label>
+            </div>
+
           </div>
 
           {/* POLL FIELDS */}
@@ -621,8 +630,9 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
 
                  {/* CẢNH BÁO NẾU LEADER KHÔNG CÓ NHÓM */}
                  {freshCurrentUser?.role !== 'admin' && availableDepartments.length === 0 && availableGrades.length === 0 && (
-                    <div className="text-center p-4 bg-rose-50 rounded-xl border border-rose-100">
-                      <p className="text-xs text-rose-600 font-medium">Tài khoản của bạn chưa được phân bổ vào Tổ/Nhóm nào. Vui lòng cập nhật hồ sơ trong phần Nhân sự trước khi giao việc.</p>
+                    <div className="text-center p-4 bg-rose-50 rounded-xl border border-rose-100 flex items-center justify-center gap-2">
+                      <ShieldAlert className="w-5 h-5 text-rose-500" />
+                      <p className="text-xs text-rose-600 font-medium text-left">Tài khoản chưa được phân bổ vào Tổ/Nhóm nào. Hãy báo Admin.</p>
                     </div>
                  )}
                </div>
@@ -674,7 +684,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                      uGrades.some(g => g.toLowerCase().includes(userSearchQuery.toLowerCase()))
                    }).length === 0 && (
                      <div className="text-center text-slate-400 text-sm py-6">
-                       Không có kết quả nào trong quyền quản lý của bạn.
+                       Không có kết quả nào.
                      </div>
                    )}
                  </div>
@@ -760,8 +770,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                         placeholder="Link Google Drive, Website hoặc URL tài liệu..."
                       />
                      <div className="w-full text-xs font-semibold bg-emerald-50 border border-emerald-100 text-emerald-700 px-2 py-1.5 rounded-lg flex items-center">
-  Phân loại: {att.category}
-</div>
+                        Phân loại: {att.category}
+                     </div>
                     </div>
                     <button type="button" onClick={() => handleRemoveAttachment(idx)} className="p-2 text-slate-400 hover:text-rose-500 rounded-lg transition-colors">
                       <Trash2 className="w-5 h-5" />
