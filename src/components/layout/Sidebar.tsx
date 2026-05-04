@@ -64,7 +64,7 @@ export const Sidebar: React.FC = () => {
               active={activeTab === 'dashboard'} 
               onClick={() => setActiveTab('dashboard')}
               icon={<LayoutDashboard className="w-5 h-5" />}
-              label="Bảng điều khiển"
+              label="Quản lý & Giao việc"
             />
             <NavItem 
               active={activeTab === 'statistics'} 
