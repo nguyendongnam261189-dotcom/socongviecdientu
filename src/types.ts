@@ -66,6 +66,11 @@ export interface Task {
 
   attachments?: { title: string; url: string; category?: string }[];
   createdAt: string;
+  
+  // --- TÍNH NĂNG MỚI ĐÃ TÍCH HỢP ---
+  allowUserAddOption?: boolean; // Cho phép giáo viên thêm option vào khảo sát
+  reportTemplate?: { id: string; label: string; type: 'text' | 'number'; required: boolean }[]; // Mẫu báo cáo nhanh
+  isOfficial?: boolean; // Cờ đánh giá tiến độ thi đua
 }
 
 export interface Comment {
