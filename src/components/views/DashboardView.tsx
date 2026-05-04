@@ -90,15 +90,15 @@ export const DashboardView: React.FC = () => {
       });
       if (tokens.length > 0) {
         try {
-          await fetch('/api/notify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              tokens,
-              title: '⚡ THÔNG BÁO KHẨN CẤP',
-              body: `Công việc "${task.title}" vừa được đánh dấu RẤT GẤP! Đề nghị hoàn thành ngay!`
-            })
-          });
+await fetch('/api/notify', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    tokens,
+    title: `🚨 KHẨN CẤP: ${task.title}`,
+    body: `⚠️ ${freshCurrentUser?.name || 'Quản trị viên'} vừa đánh dấu việc này là RẤT GẤP. Đề nghị ưu tiên xử lý ngay lập tức!`
+  })
+});
           showToast(`Đã bật khẩn cấp và báo động cho ${pendingUids.length} người!`);
           return;
         } catch (err) { console.error(err); }
