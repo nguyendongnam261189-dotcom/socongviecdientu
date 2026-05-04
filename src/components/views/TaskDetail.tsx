@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { format, parseISO } from 'date-fns';
-import { ChevronLeft, Send, Paperclip, CheckCircle2, Circle, Clock, Trash2, FileText, Download, Lock, Unlock, MessageSquareReply, Edit2, X, Search, BellRing, Archive, ArchiveRestore } from 'lucide-react';
+import { ChevronLeft, Send, Paperclip, CheckCircle2, Circle, Clock, Trash2, FileText, Download, Lock, Unlock, MessageSquareReply, Edit2, X, Search, BellRing, Archive, ArchiveRestore, Plus } from 'lucide-react';
 import { Task } from '../../types';
 import { cn, canDeleteTask, canEditTask, getUserGrades } from '../../utils';
 import * as XLSX from 'xlsx';
@@ -109,12 +109,16 @@ const FilePreview: React.FC<{ title: string, url: string }> = ({ title, url }) =
 };
 
 export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack, isManagerView = false }) => {
-  const { comments, users, currentUser, addComment, updateTaskStatus, deleteTask, submitReport, showToast, markTaskRead, gasUrl } = useAppContext();
+  // Đã bổ sung votePoll và addPollOption
+  const { comments, users, currentUser, addComment, updateTaskStatus, deleteTask, submitReport, showToast, markTaskRead, gasUrl, votePoll, addPollOption } = useAppContext();
   const [isUploadingFiles, setIsUploadingFiles] = useState(false);
   const [uploadProgressState, setUploadProgressState] = useState('');
   
   const [isEditingTask, setIsEditingTask] = useState(false);
   const [userSearchQuery, setUserSearchQuery] = useState('');
+
+  // State lưu text khi user tự thêm option khảo sát
+  const [newPollOptionText, setNewPollOptionText] = useState('');
 
   useEffect(() => {
     markTaskRead(task.id);
@@ -149,28 +153,28 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack, isManagerV
   const isTaskClosed = task.status === 'done';
 
   const handleRemindIndividual = async (uid: string, userName: string) => {
-  const targetUser = users.find(u => u.id === uid);
-  if (!targetUser?.fcmTokens) {
-    showToast('Giáo viên này chưa cài App!');
-    return;
-  }
-  try {
-    const tokens = Array.isArray(targetUser.fcmTokens) ? targetUser.fcmTokens : [targetUser.fcmTokens];
-    await fetch('/api/notify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tokens,
-        title: '🔔 NHẮC NHỞ TIẾN ĐỘ',
-        body: `Chào ${userName}, việc "${task.title}" vẫn chưa hoàn thành. Sếp ${freshCurrentUser?.name || 'Quản lý'} đang chờ bạn, nhấn để cập nhật ngay!`
-      })
-    });
-    showToast(`Đã đôn đốc ${userName} thành công!`);
-  } catch (err) {
-    console.error(err);
-    showToast('Lỗi gửi nhắc nhở.');
-  }
-};
+    const targetUser = users.find(u => u.id === uid);
+    if (!targetUser?.fcmTokens) {
+      showToast('Giáo viên này chưa cài App hoặc chưa bật thông báo!');
+      return;
+    }
+    try {
+      const tokens = Array.isArray(targetUser.fcmTokens) ? targetUser.fcmTokens : [targetUser.fcmTokens];
+      await fetch('/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tokens,
+          title: '🔔 NHẮC NHỞ TIẾN ĐỘ',
+          body: `Chào ${userName}, nội dung "${task.title}" vẫn chưa hoàn thành. Sếp đang chờ phản hồi từ bạn, nhấn để cập nhật ngay!`
+        })
+      });
+      showToast(`Đã đôn đốc ${userName} thành công!`);
+    } catch (err) {
+      console.error(err);
+      showToast('Lỗi gửi nhắc nhở.');
+    }
+  };
 
   const assignedUsersData = useMemo(() => {
     if (!task.assignedTo) return [];
@@ -376,7 +380,6 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack, isManagerV
                        statusType === 'doing' ? <span className="text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-lg border border-amber-200">Đang làm</span> : 
                        <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100">Chưa làm</span>}
                       
-                      {/* VÁ LỖI MẤT CHUÔNG Ở BẢNG EXCEL: NÚT CHUÔNG ĐƯỢC CHÈN VÀO ĐÂY */}
                       {statusType !== 'done' && !isTaskClosed && canModify && (
                         <button 
                           onClick={() => handleRemindIndividual(uid, userName)}
@@ -566,6 +569,86 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, onBack, isManagerV
             </div>
           )}
         </div>
+
+        {/* ----------------------------------------------------- */}
+        {/* KHỐI GIAO DIỆN KHẢO SÁT (POLL UI) HOÀN TOÀN MỚI */}
+        {/* ----------------------------------------------------- */}
+        {task.category === 'poll' && (
+          <div className="p-4 bg-white border-b border-slate-200">
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
+              Kết quả Bình chọn / Khảo sát
+            </h4>
+            <div className="space-y-3">
+              {task.pollOptions?.map(opt => {
+                const isSelected = opt.votes?.includes(currentUser?.id || '');
+                const voteCount = opt.votes?.length || 0;
+                const totalVotes = task.pollOptions?.reduce((acc, o) => acc + (o.votes?.length || 0), 0) || 1;
+                const percent = totalVotes === 0 ? 0 : Math.round((voteCount / totalVotes) * 100);
+
+                return (
+                  <div key={opt.id} className="relative overflow-hidden rounded-xl border border-slate-200 bg-white">
+                     {/* Thanh tiến độ */}
+                     <div className="absolute left-0 top-0 bottom-0 bg-indigo-50 transition-all duration-500" style={{ width: `${percent}%` }}></div>
+                     
+                     <button
+                        onClick={() => !isManagerView && !isTaskClosed && votePoll(task.id, opt.id)}
+                        disabled={isManagerView || isTaskClosed}
+                        className={cn(
+                          "relative w-full flex items-center justify-between p-3.5 text-sm transition-colors text-left z-10",
+                          isSelected ? "text-indigo-800 font-bold" : "text-slate-700 font-medium",
+                          (!isManagerView && !isTaskClosed) ? "hover:bg-slate-50/50 cursor-pointer" : "cursor-default"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                           <div className={cn("w-5 h-5 rounded-full flex items-center justify-center border", isSelected ? "bg-indigo-600 border-indigo-600" : "border-slate-300 bg-white")}>
+                              {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+                           </div>
+                           <span>{opt.text}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-xs font-bold bg-white/80 px-2.5 py-1 rounded-md shadow-sm border border-slate-100 text-indigo-700">{voteCount} phiếu ({percent}%)</span>
+                        </div>
+                      </button>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Ô NHẬP LỰA CHỌN MỚI */}
+            {!isManagerView && !isTaskClosed && task.allowUserAddOption && (
+              <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2">
+                <input
+                  type="text"
+                  value={newPollOptionText}
+                  onChange={e => setNewPollOptionText(e.target.value)}
+                  placeholder="Thêm lựa chọn của riêng bạn..."
+                  className="flex-1 bg-slate-50 border border-slate-200 text-sm rounded-xl px-4 py-2.5 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 font-medium"
+                  onKeyDown={e => {
+                     if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (newPollOptionText.trim()) {
+                          addPollOption(task.id, newPollOptionText);
+                          setNewPollOptionText('');
+                        }
+                     }
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    if (newPollOptionText.trim()) {
+                      addPollOption(task.id, newPollOptionText);
+                      setNewPollOptionText('');
+                    }
+                  }}
+                  disabled={!newPollOptionText.trim()}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-all disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+                >
+                  <Plus className="w-4 h-4"/> Thêm
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {!isManagerView && isReport && (
           <div className="p-4 bg-white border-b border-slate-200">
