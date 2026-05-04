@@ -6,8 +6,8 @@ export interface User {
   email: string;
   name: string;
   role: Role;
-  // ĐÃ CẬP NHẬT: Cho phép lưu nhiều nhóm (string[]) hoặc 1 nhóm (string) để tương thích ngược
-  department: string | string[]; 
+  department: string; // Tổ chuyên môn (Cố định, dùng để thống kê/báo cáo)
+  groups?: string[];  // CÁC NHÓM KIÊM NHIỆM (Linh hoạt, dùng để giao việc/thông báo nhanh)
   grade: string; // single grade for simplicity as per spec
   status: UserStatus;
   avatar?: string;
@@ -44,8 +44,9 @@ export interface Task {
   createdBy: string;
   assignedTo: string[]; // User IDs
   targetRoles?: string[];
-  targetDepartments?: string[];
+  targetDepartments?: string[]; // Gửi theo Tổ chuyên môn
   targetGrades?: string[];
+  targetGroups?: string[]; // Gửi theo Nhóm kiêm nhiệm
   deadline?: string; // ISO date string
 
   // For tasks
@@ -87,6 +88,7 @@ export interface Document {
   driveUrl: string;
   targetRole?: Role;
   targetDepartment?: string;
+  targetGroup?: string; // Lưu nhóm cho tài liệu
   category?: string;
   createdAt: string;
   createdBy: string;
