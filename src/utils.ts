@@ -6,27 +6,31 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// HÀM HỖ TRỢ: Đảm bảo lấy mảng Khối/Nhóm kiêm nhiệm một cách an toàn
+export const getUserGrades = (grade: string | string[] | undefined): string[] => {
+  if (!grade) return [];
+  if (Array.isArray(grade)) return grade;
+  return [grade];
+};
+
 export const isTaskVisible = (task: Task, currentUser: User | null, allUsers?: User[]): boolean => {
   if (!currentUser) return false;
   if (currentUser.role === 'admin') return true;
   if (task.createdBy === currentUser.id) return true;
   if (task.assignedTo?.includes(currentUser.id)) return true;
 
-  const matchRole = task.targetRoles?.includes(currentUser.role);
-  
-  // So sánh chuẩn: Tổ chuyên môn (Dùng string)
-  // Lớp bảo vệ: Nếu lỡ có user lưu department dạng mảng lúc test, ta lấy phần tử đầu tiên
   const userDept = typeof currentUser.department === 'string' 
     ? currentUser.department 
     : (Array.isArray(currentUser.department) ? currentUser.department[0] : '');
-    
-  const matchDept = task.targetDepartments?.includes(userDept || '');
-  const matchGrade = task.targetGrades?.includes(currentUser.grade || '');
-  
-  // KIỂM TRA MỚI: Người dùng có nằm trong Nhóm kiêm nhiệm nào mà Task nhắm tới không?
-  const matchGroup = task.targetGroups?.some(group => currentUser.groups?.includes(group));
 
-  return !!(matchRole || matchDept || matchGrade || matchGroup);
+  const userGrades = getUserGrades(currentUser.grade);
+
+  const matchRole = task.targetRoles?.includes(currentUser.role);
+  const matchDept = task.targetDepartments?.includes(userDept || '');
+  // NÂNG CẤP: Kiểm tra xem User có nằm trong Khối/Nhóm nào mà Task nhắm tới không
+  const matchGrade = task.targetGrades?.some(g => userGrades.includes(g));
+
+  return !!(matchRole || matchDept || matchGrade);
 };
 
 export const canEditTask = (task: Task, currentUser: User | null, allUsers?: User[]): boolean => {
@@ -37,7 +41,6 @@ export const canEditTask = (task: Task, currentUser: User | null, allUsers?: Use
     ? currentUser.department 
     : (Array.isArray(currentUser.department) ? currentUser.department[0] : '');
 
-  // Tổ trưởng có quyền sửa nếu người tạo cùng TỔ CHUYÊN MÔN
   if (currentUser.role === 'leader' && userDept) {
     if (task.createdBy === currentUser.id) return true;
     if (allUsers) {
