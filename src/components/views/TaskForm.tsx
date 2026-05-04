@@ -49,7 +49,6 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
   const [selectedUsers, setSelectedUsers] = useState<string[]>(initialTask?.assignedTo || []);
   const [userSearchQuery, setUserSearchQuery] = useState('');
   
-  // TÍNH NĂNG MỚI: DANH SÁCH LOẠI TRỪ
   const [excludedUsers, setExcludedUsers] = useState<string[]>(initialTask?.excludedUsers || []);
   const [excludeMe, setExcludeMe] = useState(false);
   const [showExclusionList, setShowExclusionList] = useState(false);
@@ -70,7 +69,34 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadCategory, setUploadCategory] = useState<string>(documentCategories[0] || 'Khác');
 
+  // BỘ LỌC QUYỀN LỰC: Chỉ cho phép Leader thấy Tổ/Nhóm của mình
   const allSystemGrades = Array.from(new Set([...contextGrades, ...users.flatMap(u => getUserGrades(u.grade))])).filter(Boolean).sort();
+  
+  const availableDepartments = useMemo(() => {
+    if (currentUser?.role === 'admin') return contextDepartments;
+    const myDept = typeof currentUser?.department === 'string' ? currentUser.department : (Array.isArray(currentUser?.department) ? currentUser.department[0] : '');
+    return myDept && myDept !== 'Khác' ? [myDept] : [];
+  }, [currentUser, contextDepartments]);
+
+  const availableGrades = useMemo(() => {
+    if (currentUser?.role === 'admin') return allSystemGrades;
+    return getUserGrades(currentUser?.grade);
+  }, [currentUser, allSystemGrades]);
+
+  // Bộ lọc danh sách User cho mục "Chọn từng người": Leader chỉ thấy người trong cùng Tổ/Nhóm
+  const availableUsers = useMemo(() => {
+    if (currentUser?.role === 'admin') return users;
+    const myDept = typeof currentUser?.department === 'string' ? currentUser.department : '';
+    const myGrades = getUserGrades(currentUser?.grade);
+    
+    return users.filter(u => {
+      const uDept = typeof u.department === 'string' ? u.department : '';
+      const uGrades = getUserGrades(u.grade);
+      const isSameDept = myDept && uDept === myDept;
+      const isSameGrade = uGrades.some(g => myGrades.includes(g));
+      return isSameDept || isSameGrade;
+    });
+  }, [currentUser, users]);
 
   const handleAddAttachment = () => {
     setAttachments(prev => [...prev, { title: '', url: '', category: documentCategories[0] || 'Khác' }]);
@@ -171,9 +197,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
     setArr(prev => prev.includes(item) ? prev.filter(i => i !== item) : [...prev, item]);
   };
 
-  // Tính toán TẤT CẢ người nhận dự kiến (Chưa trừ người bị loại trừ)
   const rawAssignedUsers = useMemo(() => {
-    if (targetType === 'all') return users;
+    if (targetType === 'all') return availableUsers; // Đã giới hạn theo quyền Admin/Leader
     if (targetType === 'individual') return users.filter(u => selectedUsers.includes(u.id));
     
     return users.filter(u => {
@@ -186,7 +211,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
       
       return matchRole && matchDept && matchGrade;
     });
-  }, [targetType, users, selectedRoles, selectedDepartments, selectedGrades, selectedUsers]);
+  }, [targetType, users, availableUsers, selectedRoles, selectedDepartments, selectedGrades, selectedUsers]);
 
   const toggleExcludeUser = (uid: string) => {
     setExcludedUsers(prev => prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]);
@@ -195,13 +220,11 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Tổng hợp danh sách loại trừ cuối cùng
     let finalExcluded = [...excludedUsers];
     if (excludeMe && currentUser && !finalExcluded.includes(currentUser.id)) {
         finalExcluded.push(currentUser.id);
     }
     
-    // Gạn lọc danh sách người nhận thực tế
     const finalAssignedTo = rawAssignedUsers.filter(u => !finalExcluded.includes(u.id)).map(u => u.id);
     
     if (!title.trim() || finalAssignedTo.length === 0) {
@@ -223,7 +246,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
       status: 'todo',
       category,
       assignedTo: finalAssignedTo,
-      excludedUsers: finalExcluded, // LƯU DANH SÁCH ĐEN VÀO DATABASE
+      excludedUsers: finalExcluded,
       visibility: category === 'task' ? visibility : 'public',
       createdBy: currentUser?.id || '',
       attachments: attachments.filter(a => a.title.trim() && a.url.trim()),
@@ -298,8 +321,6 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
 
     onBack();
   };
-
-  const uniqueDepartments = contextDepartments;
 
   const categories: { value: TaskCategory, label: string }[] = [
     { value: 'task', label: 'Công Việc' },
@@ -548,7 +569,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                    onChange={e => setTargetType(e.target.value as 'all' | 'specific' | 'individual')}
                    className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 text-sm font-medium outline-none"
                  >
-                   <option value="all">Tất cả mọi người</option>
+                   {currentUser?.role === 'admin' && <option value="all">Tất cả mọi người</option>}
                    <option value="specific">Chỉ định nhóm cụ thể</option>
                    <option value="individual">Chọn từng người</option>
                  </select>
@@ -556,45 +577,50 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
              
              {targetType === 'specific' && (
                <div className="space-y-4 pt-2 border-t border-slate-100">
-                 {/* Roles */}
-                 <div>
-                   <span className="text-[11px] font-bold text-slate-400 uppercase mb-2 block">Theo chức vụ</span>
-                   <div className="flex flex-wrap gap-2">
-                     {(['admin', 'leader', 'teacher'] as Role[]).map(role => (
-                       <button
-                         key={role}
-                         type="button"
-                         onClick={() => toggleArrayItem(selectedRoles, setSelectedRoles, role)}
-                         className={cn("px-3 py-1.5 rounded-full text-xs font-bold transition-all border", selectedRoles.includes(role) ? "bg-indigo-100 border-indigo-200 text-indigo-700" : "bg-slate-50 text-slate-600")}
-                       >
-                         {role === 'admin' ? 'BGH' : role === 'leader' ? 'Tổ trưởng' : 'Giáo viên'}
-                       </button>
-                     ))}
+                 {/* Roles - BGH only */}
+                 {currentUser?.role === 'admin' && (
+                   <div>
+                     <span className="text-[11px] font-bold text-slate-400 uppercase mb-2 block">Theo chức vụ</span>
+                     <div className="flex flex-wrap gap-2">
+                       {(['admin', 'leader', 'teacher'] as Role[]).map(role => (
+                         <button
+                           key={role}
+                           type="button"
+                           onClick={() => toggleArrayItem(selectedRoles, setSelectedRoles, role)}
+                           className={cn("px-3 py-1.5 rounded-full text-xs font-bold transition-all border", selectedRoles.includes(role) ? "bg-indigo-100 border-indigo-200 text-indigo-700" : "bg-slate-50 text-slate-600")}
+                         >
+                           {role === 'admin' ? 'BGH' : role === 'leader' ? 'Tổ trưởng' : 'Giáo viên'}
+                         </button>
+                       ))}
+                     </div>
                    </div>
-                 </div>
+                 )}
+                 
                  {/* Departments */}
-                 <div>
-                   <span className="text-[11px] font-bold text-slate-400 uppercase mb-2 block">Theo tổ chuyên môn</span>
-                   <div className="flex flex-wrap gap-2">
-                     {uniqueDepartments.map(dept => (
-                       <button
-                         key={dept}
-                         type="button"
-                         onClick={() => toggleArrayItem(selectedDepartments, setSelectedDepartments, dept)}
-                         className={cn("px-3 py-1.5 rounded-full text-xs font-bold transition-all border", selectedDepartments.includes(dept) ? "bg-amber-100 border-amber-200 text-amber-700" : "bg-slate-50 text-slate-600")}
-                       >
-                         {dept}
-                       </button>
-                     ))}
+                 {availableDepartments.length > 0 && (
+                   <div>
+                     <span className="text-[11px] font-bold text-slate-400 uppercase mb-2 block">Theo tổ chuyên môn</span>
+                     <div className="flex flex-wrap gap-2">
+                       {availableDepartments.map(dept => (
+                         <button
+                           key={dept}
+                           type="button"
+                           onClick={() => toggleArrayItem(selectedDepartments, setSelectedDepartments, dept)}
+                           className={cn("px-3 py-1.5 rounded-full text-xs font-bold transition-all border", selectedDepartments.includes(dept) ? "bg-amber-100 border-amber-200 text-amber-700" : "bg-slate-50 text-slate-600")}
+                         >
+                           {dept}
+                         </button>
+                       ))}
+                     </div>
                    </div>
-                 </div>
+                 )}
                  
                  {/* Khối / Nhóm kiêm nhiệm */}
-                 {allSystemGrades.length > 0 && (
+                 {availableGrades.length > 0 && (
                    <div>
                      <span className="text-[11px] font-bold text-slate-400 uppercase mb-2 block">Theo khối / nhóm kiêm nhiệm</span>
                      <div className="flex flex-wrap gap-2">
-                       {allSystemGrades.map(grade => (
+                       {availableGrades.map(grade => (
                          <button
                            key={grade}
                            type="button"
@@ -623,7 +649,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                    />
                  </div>
                  <div className="max-h-[300px] overflow-y-auto space-y-1 border border-slate-200 rounded-xl p-2 bg-slate-50">
-                   {users.filter(u => {
+                   {availableUsers.filter(u => {
                      const uGrades = getUserGrades(u.grade);
                      return u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) || 
                      (u.department && u.department.toLowerCase().includes(userSearchQuery.toLowerCase())) ||
@@ -649,21 +675,21 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                        </div>
                      </label>
                    )})}
-                   {users.filter(u => {
+                   {availableUsers.filter(u => {
                      const uGrades = getUserGrades(u.grade);
                      return u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) || 
                      (u.department && u.department.toLowerCase().includes(userSearchQuery.toLowerCase())) ||
                      uGrades.some(g => g.toLowerCase().includes(userSearchQuery.toLowerCase()))
                    }).length === 0 && (
                      <div className="text-center text-slate-400 text-sm py-6">
-                       Không có kết quả.
+                       Không có kết quả nào trong quyền quản lý của bạn.
                      </div>
                    )}
                  </div>
                </div>
              )}
 
-             {/* NÂNG CẤP: GIAO DIỆN XEM TRƯỚC VÀ LOẠI TRỪ (BLACKLIST) */}
+             {/* DANH SÁCH LOẠI TRỪ (BLACKLIST) */}
              {(targetType === 'all' || targetType === 'specific') && (
                 <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100 mt-2">
                   <div className="flex justify-between items-center">
@@ -701,13 +727,13 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                   {showExclusionList && excludedUsers.length > 0 && (
                      <div className="mt-2 text-[10px] text-rose-600 font-medium flex items-center gap-1">
                         <Trash2 className="w-3 h-3" />
-                        Đã loại trừ {excludedUsers.filter(id => rawAssignedUsers.some(u => u.id === id)).length} người. (Người bị loại trừ sẽ hoàn toàn không thấy thông báo này).
+                        Đã loại trừ {excludedUsers.filter(id => rawAssignedUsers.some(u => u.id === id)).length} người.
                      </div>
                   )}
                 </div>
              )}
 
-             {/* NÚT LOẠI TRỪ TÔI (CHO BGH / TỔ TRƯỞNG GIAO VIỆC) */}
+             {/* NÚT LOẠI TRỪ TÔI */}
              <label className="flex items-center gap-2 mt-2 cursor-pointer p-2 hover:bg-slate-50 rounded-lg transition-colors border border-transparent hover:border-slate-200">
                <input 
                  type="checkbox" 
@@ -715,7 +741,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
                  onChange={e => setExcludeMe(e.target.checked)} 
                  className="rounded text-rose-500 focus:ring-rose-500 w-4 h-4 border-slate-300" 
                />
-               <span className="text-xs font-bold text-slate-600">Loại trừ tôi khỏi danh sách thực hiện (Tôi chỉ tạo/đôn đốc, không nộp bài)</span>
+               <span className="text-xs font-bold text-slate-600">Loại trừ tôi khỏi danh sách thực hiện (Tôi chỉ theo dõi tiến độ)</span>
              </label>
 
           </div>
