@@ -14,6 +14,12 @@ export const LoginView: React.FC = () => {
     try {
       setLoading(true);
       const provider = new GoogleAuthProvider();
+      
+      // ĐÃ THÊM: Ép Google luôn luôn hiện bảng chọn tài khoản, khắc phục lỗi tự đăng nhập tài khoản cũ
+      provider.setCustomParameters({
+        prompt: 'select_account'
+      });
+
       const result = await signInWithPopup(auth, provider);
       
       const userEmail = result.user.email;
