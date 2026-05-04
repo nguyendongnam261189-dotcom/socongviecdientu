@@ -4,37 +4,36 @@ import { Header } from './components/layout/Header';
 import { BottomNav } from './components/layout/BottomNav';
 import { Sidebar } from './components/layout/Sidebar';
 import { TasksView } from './components/views/TasksView';
-import { NotificationsView } from './components/views/NotificationsView';
 import { DocumentsView } from './components/views/DocumentsView';
 import { LoginView } from './components/views/LoginView';
 import { DashboardView } from './components/views/DashboardView';
 import { UsersView } from './components/views/UsersView';
 import { StatisticsView } from './components/views/StatisticsView';
-
 import { SettingsView } from './components/views/SettingsView';
 
 import { RotateCcw } from 'lucide-react';
 
 const AppContent = () => {
   // Thêm vào trong hàm AppContent của App.tsx
-React.useEffect(() => {
-  let startY = 0;
-  const handleTouchStart = (e: TouchEvent) => {
-    startY = e.touches[0].pageY;
-  };
-  const handleTouchEnd = (e: TouchEvent) => {
-    // Nếu kéo xuống quá 150px và đang ở đỉnh trang
-    if (window.scrollY === 0 && e.changedTouches[0].pageY - startY > 150) {
-      window.location.reload();
-    }
-  };
-  window.addEventListener('touchstart', handleTouchStart);
-  window.addEventListener('touchend', handleTouchEnd);
-  return () => {
-    window.removeEventListener('touchstart', handleTouchStart);
-    window.removeEventListener('touchend', handleTouchEnd);
-  };
-}, []);
+  React.useEffect(() => {
+    let startY = 0;
+    const handleTouchStart = (e: TouchEvent) => {
+      startY = e.touches[0].pageY;
+    };
+    const handleTouchEnd = (e: TouchEvent) => {
+      // Nếu kéo xuống quá 150px và đang ở đỉnh trang
+      if (window.scrollY === 0 && e.changedTouches[0].pageY - startY > 150) {
+        window.location.reload();
+      }
+    };
+    window.addEventListener('touchstart', handleTouchStart);
+    window.addEventListener('touchend', handleTouchEnd);
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, []);
+
   const { activeTab, currentUser, toast, hideToast, authReady, logout } = useAppContext();
 
   if (!authReady) {
@@ -90,7 +89,7 @@ React.useEffect(() => {
         {activeTab === 'users' && <UsersView />}
         {activeTab === 'statistics' && <StatisticsView />}
         {activeTab === 'tasks' && <TasksView />}
-        {activeTab === 'notifications' && <NotificationsView />}
+        {/* Đã xóa NotificationsView ở đây */}
         {activeTab === 'documents' && <DocumentsView />}
         {activeTab === 'settings' && <SettingsView />}
       </main>
