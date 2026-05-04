@@ -16,20 +16,23 @@ export const getUserGrades = (grade: string | string[] | undefined): string[] =>
 export const isTaskVisible = (task: Task | any, currentUser: User | null, allUsers?: User[]): boolean => {
   if (!currentUser) return false;
   
-  // 1. BLACKLIST NÂNG CẤP: Chặn tuyệt đối người nằm trong danh sách loại trừ (Xử lý các vấn đề tế nhị)
+  // 1. NGƯỜI TẠO VIỆC CÓ "THẺ MIỄN TỬ": Luôn được thấy việc mình tạo ra (Để quản lý ở Tab 1)
+  // Đặt dòng này lên đầu để tránh bị hàm Blacklist bên dưới chặn nhầm
+  if (task.createdBy === currentUser.id) return true;
+
+  // 2. BLACKLIST: Chặn tuyệt đối người nằm trong danh sách loại trừ 
   if (task.excludedUsers?.includes(currentUser.id)) return false;
 
-  // 2. NGƯỜI TẠO VÀ NGƯỜI ĐƯỢC GIAO LUÔN LUÔN THẤY
-  if (task.createdBy === currentUser.id) return true;
+  // 3. NGƯỜI ĐƯỢC GIAO LUÔN LUÔN THẤY (Nằm ở Tab Việc của tôi)
   if (task.assignedTo?.includes(currentUser.id)) return true;
 
-  // 3. LUẬT MỚI: Tắt "Có đánh giá tiến độ" (isOfficial === false) -> Chặn tất cả những người không liên quan (kể cả Admin)
+  // 4. LUẬT "VIỆC NỘI BỘ": Tắt "Có đánh giá tiến độ" -> Chặn tất cả những người không liên quan (kể cả Admin)
   if (task.isOfficial === false) return false;
 
-  // 4. Nếu bật "Có đánh giá tiến độ" -> Admin được thấy để xem Thống kê và theo dõi
+  // 5. Nếu bật "Có đánh giá tiến độ" -> Admin được thấy để xem Thống kê và theo dõi
   if (currentUser.role === 'admin') return true;
 
-  // 5. Nếu bật "Có đánh giá tiến độ" -> Những người cùng nhóm/tổ/phòng ban được thấy để phối hợp
+  // 6. Nếu bật "Có đánh giá tiến độ" -> Những người cùng nhóm/tổ/phòng ban được thấy để phối hợp
   const userDept = typeof currentUser.department === 'string' 
     ? currentUser.department 
     : (Array.isArray(currentUser.department) ? currentUser.department[0] : '');
