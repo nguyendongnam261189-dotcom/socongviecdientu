@@ -305,7 +305,9 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
       if (uniqueTokens.length > 0) {
         const typePrefix = category === 'announcement' ? '📢 THÔNG BÁO' : category === 'poll' ? '📊 KHẢO SÁT' : '📝 CÔNG VIỆC';
         const notifyTitle = initialTask ? `🔄 ĐÃ CẬP NHẬT: ${title}` : `${typePrefix}: ${title}`;
-        const notifyBody = `Giao bởi: ${freshCurrentUser?.name || 'Ban Quản trị'}\n${description ? description.substring(0, 60) + '...' : 'Nhấn vào để xem chi tiết ngay.'}`;
+        const notifyBody = initialTask 
+  ? `Giao bởi: ${freshCurrentUser?.name || 'Ban Quản trị'}\n⚠️ NỘI DUNG ĐÃ THAY ĐỔI. Vui lòng xem lại thông tin mới nhất!`
+  : `Giao bởi: ${freshCurrentUser?.name || 'Ban Quản trị'}\n${description ? description.substring(0, 60) + '...' : 'Nhấn vào để xem chi tiết ngay.'}`;
 
         fetch('/api/notify', {
           method: 'POST',
