@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { Users, UserPlus, Shield, Star, BookOpen, ChevronLeft, Edit2, Upload, Download, Search, Filter, Plus, X } from 'lucide-react';
+import { Users, UserPlus, Shield, Star, BookOpen, ChevronLeft, Edit2, Upload, Download, Search, Plus, BellRing, BellOff } from 'lucide-react';
 import { cn, getUserGrades } from '../../utils';
 import { User, Role } from '../../types';
 import * as XLSX from 'xlsx';
@@ -219,7 +219,7 @@ const UserForm = ({ initialUser, onBack, onSubmit, onDelete }: { initialUser?: U
 };
 
 export const UsersView: React.FC = () => {
-  const { users, currentUser, addUser, updateUser, deleteUser, departments, grades } = useAppContext();
+  const { users, currentUser, addUser, updateUser, deleteUser, departments } = useAppContext();
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isAddingUser, setIsAddingUser] = useState(false);
   
@@ -456,6 +456,10 @@ export const UsersView: React.FC = () => {
               <div className="divide-y divide-slate-100">
                 {deptUsers.map(user => {
                   const uGrades = getUserGrades(user.grade);
+                  
+                  // KIỂM TRA TRẠNG THÁI THÔNG BÁO PUSH
+                  const hasPushNotif = user.fcmTokens && user.fcmTokens.length > 0;
+
                   return (
                   <div key={user.id} className="p-3 flex items-center justify-between hover:bg-slate-50 transition-colors group">
                     <div className="flex items-center gap-3">
@@ -468,6 +472,20 @@ export const UsersView: React.FC = () => {
                           {uGrades.length > 0 ? <span className="text-emerald-600 font-medium">{uGrades.join(', ')}</span> : 'Chưa phân công nhóm/khối'}
                           {user.phone && <span className="text-slate-400"> • {user.phone}</span>}
                         </div>
+
+                        {/* NHÃN TRẠNG THÁI THÔNG BÁO */}
+                        <div className="flex items-center gap-1 mt-1.5">
+                           {hasPushNotif ? (
+                              <span className="flex items-center gap-1 text-[9px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-bold border border-emerald-100 w-fit" title="Đã cài App & Bật thông báo">
+                                 <BellRing className="w-2.5 h-2.5" /> Bật thông báo
+                              </span>
+                           ) : (
+                              <span className="flex items-center gap-1 text-[9px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded font-bold border border-slate-200 w-fit" title="Chưa cài App hoặc đang tắt thông báo">
+                                 <BellOff className="w-2.5 h-2.5" /> Tắt thông báo
+                              </span>
+                           )}
+                        </div>
+
                       </div>
                     </div>
                     <div className="flex gap-1.5 items-center">
