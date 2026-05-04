@@ -292,36 +292,35 @@ export const TaskForm: React.FC<TaskFormProps> = ({ onBack, initialTask }) => {
       showToast('Tạo thành công!');
     }
     
+   // --- ĐOẠN CODE GỬI THÔNG BÁO XỊN SÒ MỚI ---
     try {
       const targetedUsers = users.filter(u => finalAssignedTo.includes(u.id));
       const validTokens: string[] = [];
-
       targetedUsers.forEach((u: any) => {
-        if (u.fcmTokens && Array.isArray(u.fcmTokens)) {
-          validTokens.push(...u.fcmTokens);
-        } else if (typeof u.fcmTokens === 'string') {
-          validTokens.push(u.fcmTokens);
-        }
+        if (u.fcmTokens && Array.isArray(u.fcmTokens)) validTokens.push(...u.fcmTokens);
+        else if (typeof u.fcmTokens === 'string') validTokens.push(u.fcmTokens);
       });
-
       const uniqueTokens = Array.from(new Set(validTokens)).filter(t => t);
 
       if (uniqueTokens.length > 0) {
+        const typePrefix = category === 'announcement' ? '📢 THÔNG BÁO' : category === 'poll' ? '📊 KHẢO SÁT' : '📝 CÔNG VIỆC';
+        const notifyTitle = initialTask ? `🔄 ĐÃ CẬP NHẬT: ${title}` : `${typePrefix}: ${title}`;
+        const notifyBody = `Giao bởi: ${freshCurrentUser?.name || 'Ban Quản trị'}\n${description ? description.substring(0, 60) + '...' : 'Nhấn vào để xem chi tiết ngay.'}`;
+
         fetch('/api/notify', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             tokens: uniqueTokens,
-            title: initialTask ? `Đã cập nhật: ${title}` : `Nội dung mới: ${title}`,
-            body: description || 'Bạn có một công việc/thông báo mới trên hệ thống.'
+            title: notifyTitle,
+            body: notifyBody
           })
         }).catch(err => console.error("Lỗi gửi notify:", err));
       }
     } catch (error) {
-      console.error('Lỗi khi kích hoạt trạm phát sóng Vercel:', error);
+      console.error('Lỗi khi kích hoạt thông báo:', error);
     }
+    // ------------------------------------------
 
     onBack();
   };
