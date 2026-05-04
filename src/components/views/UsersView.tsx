@@ -5,13 +5,6 @@ import { cn } from '../../utils';
 import { User, Role } from '../../types';
 import * as XLSX from 'xlsx';
 
-// HÀM HỖ TRỢ: Tự động chuyển đổi dữ liệu cũ (1 nhóm) thành mảng (nhiều nhóm) an toàn
-const getUserDepts = (dept: string | string[] | undefined): string[] => {
-  if (!dept) return ['Chưa phân bổ'];
-  if (Array.isArray(dept)) return dept.length > 0 ? dept : ['Chưa phân bổ'];
-  return [dept];
-};
-
 const RoleOption = ({ active, onClick, label }: { active: boolean, onClick: () => void, label: string }) => (
   <button 
     type="button"
@@ -28,20 +21,25 @@ const RoleOption = ({ active, onClick, label }: { active: boolean, onClick: () =
 );
 
 const UserForm = ({ initialUser, onBack, onSubmit, onDelete }: { initialUser?: User, onBack: () => void, onSubmit: (user: Partial<User>) => void, onDelete?: () => void }) => {
-  const { departments: contextDepartments, grades: contextGrades } = useAppContext();
+  const { departments: contextDepartments, grades: contextGrades, users } = useAppContext();
   const [name, setName] = useState(initialUser?.name || '');
   const [email, setEmail] = useState(initialUser?.email || '');
   const [phone, setPhone] = useState(initialUser?.phone || '');
   
-  // NÂNG CẤP: Lưu nhiều nhóm (Mảng) thay vì 1 chuỗi
-  const [userDepts, setUserDepts] = useState<string[]>(getUserDepts(initialUser?.department));
+  // CẤU TRÚC MỚI: Tách biệt Tổ chuyên môn và Nhóm kiêm nhiệm
+  const [department, setDepartment] = useState<string>(
+    (typeof initialUser?.department === 'string' ? initialUser.department : undefined) || 
+    (contextDepartments.length > 0 ? contextDepartments[0] : 'Khác')
+  );
+  const [userGroups, setUserGroups] = useState<string[]>(initialUser?.groups || []);
+  const [newGroup, setNewGroup] = useState('');
   
   const [role, setRole] = useState<Role>(initialUser?.role || 'teacher');
   const [grade, setGrade] = useState<string>(initialUser?.grade || (contextGrades.length > 0 ? contextGrades[0] : ''));
 
-  const toggleDept = (dept: string) => {
-    setUserDepts(prev => prev.includes(dept) ? prev.filter(d => d !== dept) : [...prev, dept]);
-  };
+  // Tự động gom các Nhóm kiêm nhiệm hiện có trong toàn hệ thống
+  const allSystemGroups = Array.from(new Set(users.flatMap(u => u.groups || []))).filter(Boolean).sort();
+  const displayGroups = Array.from(new Set([...allSystemGroups, ...userGroups]));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,7 +55,8 @@ const UserForm = ({ initialUser, onBack, onSubmit, onDelete }: { initialUser?: U
       name,
       email,
       phone,
-      department: userDepts as any, // Gửi mảng lên Database
+      department, // Gửi 1 Tổ cố định
+      groups: userGroups, // Gửi mảng Nhóm linh hoạt
       role,
       grade
     });
@@ -112,30 +111,77 @@ const UserForm = ({ initialUser, onBack, onSubmit, onDelete }: { initialUser?: U
               />
             </div>
 
-            {/* NÂNG CẤP: Chuyển Select thành các nút chọn nhiều Nhóm */}
+            {/* TỔ CHUYÊN MÔN: CHỌN 1 */}
             <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Tổ chuyên môn / Nhóm (Có thể chọn nhiều)</label>
-              <div className="flex flex-wrap gap-2">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Tổ chuyên môn (Chính)</label>
+              <select 
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all font-medium shadow-inner"
+              >
                 {contextDepartments.map(dept => (
+                  <option key={dept} value={dept}>{dept}</option>
+                ))}
+                {!contextDepartments.includes(department) && department !== '' && (
+                  <option value={department}>{department} (Khác)</option>
+                )}
+              </select>
+            </div>
+
+            {/* NHÓM KIÊM NHIỆM: CHỌN NHIỀU */}
+            <div className="pt-2 border-t border-slate-100">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Nhóm kiêm nhiệm / Chức vụ khác</label>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {displayGroups.map(grp => (
                   <button
-                    key={dept}
+                    key={grp}
                     type="button"
-                    onClick={() => toggleDept(dept)}
+                    onClick={() => setUserGroups(prev => prev.includes(grp) ? prev.filter(g => g !== grp) : [...prev, grp])}
                     className={cn(
                       "px-3 py-1.5 rounded-full text-xs font-bold transition-all border",
-                      userDepts.includes(dept) 
+                      userGroups.includes(grp) 
                         ? "bg-indigo-100 border-indigo-200 text-indigo-700 shadow-sm" 
                         : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-white"
                     )}
                   >
-                    {dept}
+                    {grp}
                   </button>
                 ))}
               </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newGroup}
+                  onChange={e => setNewGroup(e.target.value)}
+                  placeholder="Thêm nhóm mới..."
+                  className="flex-1 bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl px-3 py-2 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (newGroup.trim() && !userGroups.includes(newGroup.trim())) {
+                        setUserGroups([...userGroups, newGroup.trim()]);
+                        setNewGroup('');
+                      }
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (newGroup.trim() && !userGroups.includes(newGroup.trim())) {
+                      setUserGroups([...userGroups, newGroup.trim()]);
+                      setNewGroup('');
+                    }
+                  }}
+                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs transition-colors flex items-center justify-center"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
-            <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Vai trò</label>
+            <div className="pt-2 border-t border-slate-100">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Vai trò hệ thống</label>
               <div className="grid grid-cols-3 gap-2">
                 <RoleOption active={role === 'teacher'} onClick={() => setRole('teacher')} label="Giáo viên" />
                 <RoleOption active={role === 'leader'} onClick={() => setRole('leader')} label="Tổ trưởng" />
@@ -218,16 +264,17 @@ export const UsersView: React.FC = () => {
           if (!row || row.length < 1 || !row[0]) continue;
           
           const name = String(row[0]).trim();
-          
-          // NÂNG CẤP: Import Excel hỗ trợ cách nhau dấu phẩy (VD: Toán, Liên tịch)
-          const deptStr = row[1] ? String(row[1]).trim() : 'Khác';
-          const departmentArr = deptStr.split(',').map(s => s.trim()).filter(Boolean);
-          
+          const department = row[1] ? String(row[1]).trim() : 'Khác';
           const grade = row[2] ? String(row[2]).trim() : '';
+          
+          // ĐÃ NÂNG CẤP MẪU EXCEL: Cột 4 là Nhóm kiêm nhiệm
+          const groupsStr = row[3] ? String(row[3]).trim() : '';
+          const groupsArr = groupsStr.split(',').map(s => s.trim()).filter(Boolean);
 
           addUser({
             name,
-            department: departmentArr.length > 0 ? departmentArr : ['Khác'],
+            department,
+            groups: groupsArr,
             role: 'teacher',
             grade,
           } as any);
@@ -245,19 +292,19 @@ export const UsersView: React.FC = () => {
 
   const handleDownloadTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([
-      ['Họ và tên', 'Tổ (Nhiều tổ cách nhau dấu phẩy)', 'Khối giảng dạy'],
-      ['Nguyễn Văn A', 'Toán', 'Khối 10'],
-      ['Trần Thị B', 'Văn, Liên tịch', 'Khối 11']
+      ['Họ và tên', 'Tổ chuyên môn (1 tổ)', 'Khối giảng dạy', 'Nhóm kiêm nhiệm (Nhiều nhóm cách nhau dấu phẩy)'],
+      ['Nguyễn Văn A', 'Toán', 'Khối 10', 'Liên tịch, Công đoàn'],
+      ['Trần Thị B', 'Văn', 'Khối 11', 'Hội đồng thi']
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'DanhSachNhanSu');
     XLSX.writeFile(wb, 'Mau_DanhSachNhanSu.xlsx');
   };
   
-  // Tập hợp tất cả các Tổ/Nhóm Độc nhất từ Context và từ danh sách User hiện tại
-  const allUniqueDepts = Array.from(new Set([
+  // Lấy ra danh sách Tổ chuyên môn cố định
+  const allUniqueOfficialDepts = Array.from(new Set([
     ...departments,
-    ...users.filter(u => u.status === 'approved').flatMap(u => getUserDepts(u.department))
+    ...users.filter(u => u.status === 'approved').map(u => typeof u.department === 'string' ? u.department : 'Chưa phân bổ')
   ])).sort();
 
   if (isAddingUser || editingUser) {
@@ -340,8 +387,8 @@ export const UsersView: React.FC = () => {
               onChange={e => setFilterDept(e.target.value)}
               className="bg-slate-50 border border-slate-200 text-sm rounded-xl px-3 py-2 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 font-medium text-slate-600"
             >
-              <option value="all">Tất cả các Tổ/Nhóm</option>
-              {allUniqueDepts.map(d => <option key={d} value={d}>Tổ/Nhóm {d}</option>)}
+              <option value="all">Tất cả các Tổ</option>
+              {allUniqueOfficialDepts.map(d => <option key={d} value={d}>Tổ {d}</option>)}
             </select>
           </div>
         </div>
@@ -371,7 +418,7 @@ export const UsersView: React.FC = () => {
                       </div>
                       <div className="min-w-0">
                         <div className="font-bold text-sm text-amber-900 truncate">{user.name}</div>
-                        <div className="text-[11px] text-amber-700 mt-0.5 truncate">{user.email} • {getUserDepts(user.department).join(', ')}</div>
+                        <div className="text-[11px] text-amber-700 mt-0.5 truncate">{user.email} • {user.department}</div>
                       </div>
                     </div>
                     <div className="flex gap-2 items-center">
@@ -395,16 +442,16 @@ export const UsersView: React.FC = () => {
           </div>
         )}
 
-        {allUniqueDepts.map(dept => {
+        {allUniqueOfficialDepts.map(dept => {
           if (filterDept !== 'all' && dept !== filterDept) return null;
           
           const deptUsers = users.filter(u => {
-            const uDepts = getUserDepts(u.department);
-            if (!uDepts.includes(dept)) return false;
+            if (u.department !== dept) return false;
             if (u.status !== 'approved') return false;
             if (searchQuery) {
                const q = searchQuery.toLowerCase();
-               return u.name.toLowerCase().includes(q) || u.role.includes(q) || (u.phone && u.phone.includes(q)) || u.email.toLowerCase().includes(q);
+               const inGroup = u.groups?.some(g => g.toLowerCase().includes(q));
+               return u.name.toLowerCase().includes(q) || u.role.includes(q) || (u.phone && u.phone.includes(q)) || u.email.toLowerCase().includes(q) || inGroup;
             }
             return true;
           });
@@ -417,7 +464,7 @@ export const UsersView: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
                     <BookOpen className="w-4 h-4 text-indigo-500" />
-                    {dept === 'BGH' ? 'Ban Giám Hiệu' : `Nhóm/Tổ ${dept}`}
+                    {dept === 'BGH' ? 'Ban Giám Hiệu' : `Tổ ${dept}`}
                   </h3>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white text-slate-500 shadow-sm border border-slate-200">
                     {deptUsers.length} TV
@@ -435,6 +482,7 @@ export const UsersView: React.FC = () => {
                         <div className="font-bold text-sm text-slate-800 truncate">{user.name}</div>
                         <div className="text-[11px] text-slate-500 mt-0.5 max-w-[200px] truncate">
                           {user.grade ? user.grade : 'Chưa phân công'}
+                          {user.groups && user.groups.length > 0 && <span className="text-indigo-500 font-medium"> • Nhóm: {user.groups.join(', ')}</span>}
                           {user.phone && ` • ${user.phone}`}
                         </div>
                       </div>
