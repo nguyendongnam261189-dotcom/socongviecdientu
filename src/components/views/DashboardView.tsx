@@ -4,7 +4,7 @@ import { PieChart, TrendingUp, AlertCircle, FileText, CheckCircle2, Plus, Users 
 import { format, isPast, parseISO } from 'date-fns';
 import { TaskForm } from './TaskForm';
 import { TaskDetail } from './TaskDetail';
-import { cn, isTaskVisible, getUserDepts } from '../../utils'; // ĐÃ IMPORT THÊM getUserDepts
+import { cn, isTaskVisible } from '../../utils'; // ĐÃ BỎ getUserDepts VÌ KHÔNG CÒN CẦN THIẾT
 
 export const DashboardView: React.FC = () => {
   const { tasks: allTasks, users, currentUser, setActiveTab, showToast, toggleTaskUrgent } = useAppContext();
@@ -25,14 +25,17 @@ export const DashboardView: React.FC = () => {
 
   const overdueTasks = tasks.filter(t => t.deadline && t.status !== 'done' && isPast(parseISO(t.deadline)));
 
-  // NÂNG CẤP: Thống kê theo tổ (Hỗ trợ đa nhóm/tổ)
-  // 1. Lấy tất cả các tổ/nhóm đang có thật trong hệ thống từ danh sách người dùng
-  const allDeptsInUse = users.flatMap(u => getUserDepts(u.department));
+  // CHUẨN HÓA LẠI: Thống kê tốc độ cao theo TỔ CHUYÊN MÔN (department là string)
+  // 1. Lấy tất cả các tổ đang có thật trong hệ thống
+  const allDeptsInUse = users.map(u => typeof u.department === 'string' ? u.department : (Array.isArray(u.department) ? u.department[0] : 'Khác')).filter(Boolean);
   const departments = Array.from(new Set(allDeptsInUse)).filter(d => d !== 'BGH' && d !== 'Chưa phân bổ');
   
   const deptStats = departments.map(dept => {
-    // 2. Tìm tất cả những người thuộc tổ này (Dù họ có kiêm nhiệm tổ khác)
-    const deptUsers = users.filter(u => getUserDepts(u.department).includes(dept)).map(u => u.id);
+    // 2. Lấy những người thuộc đúng tổ này
+    const deptUsers = users.filter(u => {
+       const uDept = typeof u.department === 'string' ? u.department : (Array.isArray(u.department) ? u.department[0] : 'Khác');
+       return uDept === dept;
+    }).map(u => u.id);
     
     const deptTasks = tasks.filter(t => t.assignedTo?.some(uid => deptUsers.includes(uid)));
     const deptDone = deptTasks.filter(t => {
@@ -171,7 +174,7 @@ export const DashboardView: React.FC = () => {
       {/* Thống kê theo tổ */}
       <div>
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 ml-1 flex items-center gap-1.5">
-          <PieChart className="w-4 h-4" /> Thống kê theo tổ chuyên môn / Nhóm
+          <PieChart className="w-4 h-4" /> Thống kê theo tổ chuyên môn
         </h3>
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
           {deptStats.length === 0 ? (
@@ -270,11 +273,15 @@ export const DashboardView: React.FC = () => {
                         {task.pendingUids.map(uid => {
                            const user = users.find(u => u.id === uid);
                            if (!user) return null;
+                           const uDept = typeof user.department === 'string' ? user.department : (Array.isArray(user.department) ? user.department[0] : 'Khác');
                            return (
                               <div key={uid} className="flex justify-between items-center bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-100">
                                  <div className="flex flex-col">
                                     <span className="text-xs font-bold text-slate-700">{user.name}</span>
-                                    <span className="text-[9px] text-slate-500 line-clamp-1">{getUserDepts(user.department).join(', ')}</span>
+                                    <span className="text-[9px] text-slate-500 line-clamp-1">
+                                      {uDept}
+                                      {user.groups && user.groups.length > 0 && <span className="text-indigo-500 font-medium"> • Nhóm: {user.groups.join(', ')}</span>}
+                                    </span>
                                  </div>
                                  <button 
                                     onClick={(e) => handleRemind(e, uid, task.title)}
@@ -320,11 +327,15 @@ export const DashboardView: React.FC = () => {
                         {task.doneUids.map(uid => {
                            const user = users.find(u => u.id === uid);
                            if (!user) return null;
+                           const uDept = typeof user.department === 'string' ? user.department : (Array.isArray(user.department) ? user.department[0] : 'Khác');
                            return (
                               <div key={uid} className="flex justify-between items-center bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-100">
                                  <div className="flex flex-col">
                                     <span className="text-xs font-bold text-slate-700">{user.name}</span>
-                                    <span className="text-[9px] text-slate-500 line-clamp-1">{getUserDepts(user.department).join(', ')}</span>
+                                    <span className="text-[9px] text-slate-500 line-clamp-1">
+                                      {uDept}
+                                      {user.groups && user.groups.length > 0 && <span className="text-indigo-500 font-medium"> • Nhóm: {user.groups.join(', ')}</span>}
+                                    </span>
                                  </div>
                                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 ml-2" />
                               </div>
