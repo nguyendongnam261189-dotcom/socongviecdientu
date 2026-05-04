@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { Task } from '../../types';
 import { format, isPast, parseISO, differenceInDays } from 'date-fns';
-import { CheckCircle2, Circle, Clock, FileText, Zap, Megaphone, FileSpreadsheet } from 'lucide-react';
-import { cn } from '../../utils';
+import { CheckCircle2, Circle, Clock, FileText, Zap, Megaphone, FileSpreadsheet, Check } from 'lucide-react';
+import { cn, canEditTask } from '../../utils';
 import { TaskDetail } from './TaskDetail';
 
 export const TasksView: React.FC = () => {
@@ -19,7 +19,6 @@ export const TasksView: React.FC = () => {
 
   // 1. Lấy tất cả Công việc / Thông báo / Khảo sát DÀNH RIÊNG CHO USER NÀY
   const relevantTasks = tasks.filter(t => {
-    // Nếu là Admin, họ thấy hết ở Tab 1 rồi, nhưng ở Tab 2 này chỉ hiện những gì HỌ PHẢI LÀM (hoặc họ tạo để tiện theo dõi cá nhân)
     const isCreator = t.createdBy === currentUser?.id;
     const isAssigned = t.assignedTo?.includes(currentUser?.id || '');
     const isRole = t.targetRoles?.includes(currentUser?.role || '');
@@ -57,27 +56,23 @@ export const TasksView: React.FC = () => {
     return false;
   });
 
-  // 3. Sắp xếp thông minh (Urgent -> Overdue -> Deadline gần -> Mới nhất)
+  // 3. Sắp xếp thông minh
   const sortTasks = (taskList: Task[]) => {
     return [...taskList].sort((a, b) => {
-      // 1. Ưu tiên khẩn cấp
       if (a.isUrgent && !b.isUrgent) return -1;
       if (!a.isUrgent && b.isUrgent) return 1;
 
-      // 2. Ưu tiên quá hạn
       const aOverdue = a.deadline && isPast(parseISO(a.deadline)) && a.status !== 'done';
       const bOverdue = b.deadline && isPast(parseISO(b.deadline)) && b.status !== 'done';
       if (aOverdue && !bOverdue) return -1;
       if (!aOverdue && bOverdue) return 1;
 
-      // 3. Sắp xếp theo Deadline gần nhất
       if (a.deadline && b.deadline) {
         return parseISO(a.deadline).getTime() - parseISO(b.deadline).getTime();
       }
       if (a.deadline) return -1;
       if (b.deadline) return 1;
 
-      // 4. Nếu không có deadline thì cái nào mới tạo xếp trước
       return parseISO(b.createdAt).getTime() - parseISO(a.createdAt).getTime();
     });
   };
@@ -138,9 +133,7 @@ export const TasksView: React.FC = () => {
           </div>
         </div>
 
-        {/* Task List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* Notification Banner */}
           {showNotificationBanner && (
             <div className="bg-blue-100 border-l-4 border-blue-500 p-4 rounded-xl flex justify-between items-center shadow-sm">
               <span className="text-blue-800 font-medium text-[11px] sm:text-xs pr-2">🔔 Kích hoạt thông báo đẩy để không bỏ lỡ tin khẩn cấp!</span>
@@ -172,7 +165,7 @@ export const TasksView: React.FC = () => {
 };
 
 const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick }) => {
-  const { submitReport, comments, showToast, currentUser, votePoll, markTaskRead } = useAppContext();
+  const { submitReport, comments, showToast, currentUser, votePoll, markTaskRead, users } = useAppContext();
   
   const isReport = !!task.reportTemplate && task.reportTemplate.length > 0;
   const myReport = task.submissions?.find(r => r.userId === currentUser?.id);
@@ -195,7 +188,6 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
   const isDueToday = !isDone && task.deadline && new Date().toDateString() === parseISO(task.deadline).toDateString();
   const commentCount = comments.filter(c => c.taskId === task.id).length;
 
-  // Lấy màu sắc và Icon tùy biến cho Thẻ
   let Icon = FileText;
   let catLabel = "Công việc";
   let colorTheme = "border-indigo-200";
@@ -210,22 +202,41 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
      colorTheme = "border-amber-200";
   }
 
-  // Quick Action (Đánh dấu trạng thái nhanh không cần mở Detail - Chỉ áp dụng cho Task/Thông báo)
+  // TÍNH NĂNG MƯỢN TỪ NOTIFICATION: Xử lý thao tác nhanh
   const handleQuickAction = (e: React.MouseEvent) => {
     e.stopPropagation();
-    
     if (task.category === 'announcement') {
        markTaskRead(task.id);
        showToast('Đã đánh dấu là Đã xem');
        return;
     }
-    
     if (task.category === 'task' && !isReport) {
       const newIndividualStatus = myReport?.status === 'done' ? 'todo' : 'done';
       submitReport(task.id, myReport?.content || '', myReport?.fileUrl || '', myReport?.data || {}, newIndividualStatus);
       showToast(newIndividualStatus === 'done' ? 'Đã hoàn thành' : 'Đã chuyển về chưa làm');
     }
   };
+
+  // TÍNH NĂNG MƯỢN TỪ NOTIFICATION: Bầu chọn trực tiếp
+  const handleInlineVote = (e: React.MouseEvent, optionId: string) => {
+    e.stopPropagation();
+    if (task.isLocked) {
+      showToast('Khảo sát này đã bị khóa');
+      return;
+    }
+    const oldVoteId = task.pollOptions?.find(opt => opt.votes.includes(currentUser?.id || ''))?.id;
+    votePoll(task.id, optionId);
+    
+    if (oldVoteId === optionId) {
+      showToast('Đã hủy bình chọn');
+    } else {
+      showToast('Đã ghi nhận bình chọn');
+    }
+  };
+
+  // Tính toán số liệu cho Poll và Announcement Progress
+  const canManage = canEditTask(task, currentUser, users);
+  const totalVotes = task.pollOptions?.reduce((acc, opt) => acc + opt.votes.length, 0) || 0;
 
   return (
     <div 
@@ -240,7 +251,6 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
     >
       <div className="flex justify-between items-start mb-2.5 gap-2">
         <div className="flex flex-wrap gap-1.5 items-center">
-          {/* Nhãn thể loại */}
           <span className={cn("px-2 py-0.5 text-[9px] font-bold rounded uppercase tracking-wider flex items-center gap-1 border", 
              task.category === 'announcement' ? "bg-sky-50 text-sky-700 border-sky-100" : 
              task.category === 'poll' ? "bg-amber-50 text-amber-700 border-amber-100" : 
@@ -249,7 +259,6 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
             <Icon className="w-3 h-3" /> {catLabel}
           </span>
 
-          {/* Nhãn trạng thái (Đang làm/Cần nộp...) */}
           {!isDone && (
              <span className={cn(
                "px-2 py-0.5 text-[9px] font-bold rounded uppercase tracking-wider flex items-center gap-1 border",
@@ -265,7 +274,6 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
              </span>
           )}
 
-          {/* Nhãn cảnh báo thời gian */}
           {!isDone && isDueToday && (
             <span className="px-2 py-0.5 text-[9px] font-bold text-white bg-rose-500 rounded uppercase tracking-wider shadow-sm animate-pulse">
               Hôm nay
@@ -305,6 +313,52 @@ const TaskCard: React.FC<{ task: Task, onClick: () => void }> = ({ task, onClick
           <p className="mt-1 text-[11px] text-slate-500 line-clamp-2 pr-2 leading-relaxed">
             {task.description}
           </p>
+
+          {/* TÍNH NĂNG MƯỢN TỪ NOTIFICATION: KHẢO SÁT INLINE */}
+          {task.category === 'poll' && task.pollOptions && (
+            <div className="mt-3 space-y-1.5 relative z-10">
+              {task.pollOptions.map(opt => {
+                const voted = opt.votes.includes(currentUser?.id || '');
+                const percent = totalVotes > 0 ? Math.round((opt.votes.length / totalVotes) * 100) : 0;
+                return (
+                  <button 
+                    key={opt.id} 
+                    onClick={(e) => handleInlineVote(e, opt.id)} 
+                    className={cn(
+                      "w-full text-left p-2 rounded-lg border text-[10px] sm:text-[11px] relative overflow-hidden transition-all shadow-sm", 
+                      voted ? (task.isLocked ? "border-slate-400 bg-slate-50" : "border-amber-400 bg-amber-50") : "border-slate-200 hover:bg-slate-50"
+                    )}
+                  >
+                    <div className={cn("absolute inset-y-0 left-0 transition-all opacity-50", voted ? (task.isLocked ? "bg-slate-300" : "bg-amber-300") : (task.isLocked ? "bg-slate-200" : "bg-amber-100"))} style={{ width: `${percent}%` }} />
+                    <div className="relative flex justify-between items-center z-10 px-1">
+                      <span className={cn("font-bold truncate pr-2", voted ? (task.isLocked ? "text-slate-800" : "text-amber-800") : "text-slate-700")}>{opt.text}</span>
+                      <span className="text-slate-500 font-medium text-[9px] shrink-0">{percent}%</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* TÍNH NĂNG MƯỢN TỪ NOTIFICATION: Nút xem nhanh cho thông báo */}
+          {!isDone && task.category === 'announcement' && (
+            <button onClick={handleQuickAction} className="mt-3 flex items-center gap-1.5 text-[11px] bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg font-bold hover:bg-indigo-200 shadow-sm z-10 relative">
+              <Check className="w-3.5 h-3.5" /> Đã nắm thông tin
+            </button>
+          )}
+
+          {/* TÍNH NĂNG MƯỢN TỪ NOTIFICATION: Thanh tiến độ siêu tốc cho Quản lý */}
+          {task.category === 'announcement' && canManage && (
+            <div className="mt-3 pt-3 border-t border-slate-100/50">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Tiến độ tiếp nhận</span>
+                <span className="text-[10px] font-bold text-indigo-600">{task.readBy?.length || 0} / {task.assignedTo.length}</span>
+              </div>
+              <div className="h-1 w-full bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-full bg-indigo-400 rounded-full transition-all" style={{ width: `${task.assignedTo.length ? ((task.readBy?.length || 0) / task.assignedTo.length) * 100 : 0}%` }} />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
