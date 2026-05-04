@@ -15,6 +15,10 @@ export const getUserGrades = (grade: string | string[] | undefined): string[] =>
 
 export const isTaskVisible = (task: Task, currentUser: User | null, allUsers?: User[]): boolean => {
   if (!currentUser) return false;
+  
+  // BLACKLIST NÂNG CẤP: Chặn tuyệt đối người nằm trong danh sách loại trừ (Xử lý các vấn đề tế nhị)
+  if (task.excludedUsers?.includes(currentUser.id)) return false;
+
   if (currentUser.role === 'admin') return true;
   if (task.createdBy === currentUser.id) return true;
   if (task.assignedTo?.includes(currentUser.id)) return true;
@@ -27,7 +31,6 @@ export const isTaskVisible = (task: Task, currentUser: User | null, allUsers?: U
 
   const matchRole = task.targetRoles?.includes(currentUser.role);
   const matchDept = task.targetDepartments?.includes(userDept || '');
-  // NÂNG CẤP: Kiểm tra xem User có nằm trong Khối/Nhóm nào mà Task nhắm tới không
   const matchGrade = task.targetGrades?.some(g => userGrades.includes(g));
 
   return !!(matchRole || matchDept || matchGrade);
