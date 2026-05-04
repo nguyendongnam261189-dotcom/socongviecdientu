@@ -6,6 +6,20 @@ import { format, isPast, parseISO, isAfter, isBefore, startOfDay, endOfDay } fro
 import { Task, User } from '../../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
 
+// HÀM HỖ TRỢ: Kiểm tra xem User có được giao Task hay không (Hỗ trợ cấu trúc Tổ=chuỗi, Nhóm=mảng)
+const isUserAssigned = (t: Task, u: User) => {
+  if (u.role === 'admin') return false; // Thường thống kê không đếm BGH
+  const uDept = typeof u.department === 'string' ? u.department : (Array.isArray(u.department) ? u.department[0] : 'Khác');
+  const uGrades = Array.isArray(u.grade) ? u.grade : (u.grade ? [u.grade] : []);
+  
+  if (t.assignedTo && t.assignedTo.includes(u.id)) return true;
+  if (t.targetRoles && t.targetRoles.includes(u.role)) return true;
+  if (t.targetDepartments && t.targetDepartments.includes(uDept)) return true;
+  if (t.targetGrades && t.targetGrades.some((g: string) => uGrades.includes(g))) return true;
+  if (t.visibility === 'public') return true;
+  return false;
+};
+
 export const StatisticsView: React.FC = () => {
   const { tasks, users, currentUser } = useAppContext();
   
@@ -39,44 +53,30 @@ export const StatisticsView: React.FC = () => {
     let missingReport = 0;
 
     filteredTasks.forEach(t => {
-      // Logic for tasks that are global or targeted
-      // To simplify, let's look at the submissions for tasks
-      const isReport = !!t.dataCollection?.enabled; // Or whatever makes a task a report
-      // In TasksView: const isReport = !!t.reportTemplate; Wait, reportTemplate is not in types. Let's see what makes a task a report.
-      // Ah, types.ts shows dataCollection. In previous file modification: `const isReport = !!t.reportTemplate;` Maybe it's not strictly typed.
-      // Let's assume `!!(t as any).reportTemplate` or we can just count done vs todo for submissions.
-      
-      const assignedUsers = users.filter(u => {
-      	if (t.assignedTo && t.assignedTo.includes(u.id)) return true;
-      	if (t.targetRoles && t.targetRoles.includes(u.role)) return true;
-      	if (t.targetDepartments && t.targetDepartments.includes(u.department)) return true;
-      	if (t.targetGrades && t.targetGrades.includes(u.grade)) return true;
-      	if (t.visibility === 'public') return true;
-      	return false;
-      });
+      const assignedUsers = users.filter(u => isUserAssigned(t, u));
 
-      // Filter out admin
-      const validAssignedUsers = assignedUsers.filter(u => u.role !== 'admin');
-      
-      const isGlobalDone = t.status === 'done';
-
-      validAssignedUsers.forEach(u => {
-        totalAssigned++;
+      if (assignedUsers.length > 0) {
+        totalAssigned++; // ĐÃ SỬA LỖI: Đếm theo Task (1 Task = 1 Việc), thay vì đếm theo User
         
-        const submission = t.submissions?.find(s => s.userId === u.id);
-        const userDone = submission?.status === 'done' || (isGlobalDone && submission?.status !== 'doing' && submission?.status !== 'acknowledged'); // Simplification
+        const isGlobalDone = t.status === 'done';
+        
+        // Task được coi là hoàn thành chung nếu TẤT CẢ người được giao đều đã done
+        const allDone = isGlobalDone || assignedUsers.every(u => {
+          const submission = t.submissions?.find(s => s.userId === u.id);
+          return submission?.status === 'done';
+        });
 
-        if (userDone) {
+        if (allDone) {
           totalCompleted++;
         } else {
           if (t.deadline && isPast(parseISO(t.deadline))) {
             overdue++;
           }
-          if ((t as any).reportTemplate) {
+          if ((t as any).reportTemplate || t.dataCollection?.enabled) {
             missingReport++;
           }
         }
-      });
+      }
     });
 
     return {
@@ -94,29 +94,44 @@ export const StatisticsView: React.FC = () => {
     
     // Initialize map with all user departments
     users.forEach(u => {
-      if (u.role !== 'admin' && !deps.has(u.department)) {
-        deps.set(u.department, { name: u.department, total: 0, completed: 0 });
+      if (u.role !== 'admin') {
+         const uDept = typeof u.department === 'string' ? u.department : (Array.isArray(u.department) ? u.department[0] : 'Khác');
+         if (uDept && !deps.has(uDept)) {
+           deps.set(uDept, { name: uDept, total: 0, completed: 0 });
+         }
       }
     });
 
     filteredTasks.forEach(t => {
+      const involvedDepts = new Set<string>(); // Khử trùng lặp Tổ
+      const deptUsersTotal = new Map<string, number>();
+      const deptUsersDone = new Map<string, number>();
+
       users.forEach(u => {
-        if (u.role === 'admin') return;
+        if (isUserAssigned(t, u)) {
+          const uDept = typeof u.department === 'string' ? u.department : (Array.isArray(u.department) ? u.department[0] : 'Khác');
+          if (!uDept) return;
 
-        const isAssigned = (t.assignedTo && t.assignedTo.includes(u.id)) ||
-                           (t.targetRoles && t.targetRoles.includes(u.role)) ||
-                           (t.targetDepartments && t.targetDepartments.includes(u.department)) ||
-                           (t.targetGrades && t.targetGrades.includes(u.grade)) ||
-                           t.visibility === 'public';
+          involvedDepts.add(uDept);
+          deptUsersTotal.set(uDept, (deptUsersTotal.get(uDept) || 0) + 1);
+          
+          const sub = t.submissions?.find(s => s.userId === u.id);
+          if (sub?.status === 'done' || t.status === 'done') {
+             deptUsersDone.set(uDept, (deptUsersDone.get(uDept) || 0) + 1);
+          }
+        }
+      });
 
-        if (isAssigned) {
-          const stat = deps.get(u.department);
-          if (stat) {
-            stat.total++;
-            const sub = t.submissions?.find(s => s.userId === u.id);
-            if (sub?.status === 'done' || t.status === 'done') {
-              stat.completed++;
-            }
+      // ĐÃ SỬA LỖI: Chỉ tăng +1 cho Tổ đó, dù trong Tổ có bao nhiêu người được giao Task này
+      involvedDepts.forEach(deptName => {
+        const stat = deps.get(deptName);
+        if (stat) {
+          stat.total++; 
+          const totalInDept = deptUsersTotal.get(deptName) || 0;
+          const doneInDept = deptUsersDone.get(deptName) || 0;
+          // Tổ được tính là hoàn thành task nếu tất cả thành viên trong tổ đó đã nộp bài
+          if (totalInDept > 0 && totalInDept === doneInDept) {
+            stat.completed++;
           }
         }
       });
@@ -141,15 +156,10 @@ export const StatisticsView: React.FC = () => {
       let tAssigned = 0;
       let tCompleted = 0;
       let tLate = 0;
+      const uDept = typeof u.department === 'string' ? u.department : (Array.isArray(u.department) ? u.department[0] : 'Khác');
 
       filteredTasks.forEach(t => {
-        const isAssigned = (t.assignedTo && t.assignedTo.includes(u.id)) ||
-                           (t.targetRoles && t.targetRoles.includes(u.role)) ||
-                           (t.targetDepartments && t.targetDepartments.includes(u.department)) ||
-                           (t.targetGrades && t.targetGrades.includes(u.grade)) ||
-                           t.visibility === 'public';
-        
-        if (isAssigned) {
+        if (isUserAssigned(t, u)) {
           tAssigned++;
           const sub = t.submissions?.find(s => s.userId === u.id);
           if (sub?.status === 'done' || t.status === 'done') {
@@ -164,7 +174,7 @@ export const StatisticsView: React.FC = () => {
       return {
         'Họ và tên': u.name,
         'Email': u.email,
-        'Tổ chuyên môn': u.department,
+        'Tổ chuyên môn': uDept,
         'Trạng thái tài khoản': u.status,
         'Số việc được giao': tAssigned,
         'Số việc hoàn thành': tCompleted,
@@ -176,21 +186,13 @@ export const StatisticsView: React.FC = () => {
 
     // Logic cho Sheet 3: Chi tiết Công việc
     const taskDetails = filteredTasks.map(t => {
-      // Find all names of users assigned to this
-      const assignedNames = users.filter(u => {
-      	if (t.assignedTo && t.assignedTo.includes(u.id)) return true;
-      	if (t.targetRoles && t.targetRoles.includes(u.role)) return true;
-      	if (t.targetDepartments && t.targetDepartments.includes(u.department)) return true;
-      	if (t.targetGrades && t.targetGrades.includes(u.grade)) return true;
-      	if (t.visibility === 'public') return true;
-      	return false;
-      }).filter(u => u.role !== 'admin').map(u => u.name).join(', ');
+      const assignedNames = users.filter(u => isUserAssigned(t, u)).map(u => u.name).join(', ');
 
       return {
         'Tên công việc': t.title,
         'Mô tả': t.description,
         'Trạng thái chung': t.status === 'done' ? 'Hoàn thành' : t.status === 'doing' ? 'Đang làm' : 'Chưa làm',
-        'Là báo cáo?': (t as any).reportTemplate ? 'Có' : 'Không',
+        'Là báo cáo?': (t as any).reportTemplate || t.dataCollection?.enabled ? 'Có' : 'Không',
         'Ngày tạo': format(parseISO(t.createdAt), 'dd/MM/yyyy HH:mm'),
         'Hạn chót': t.deadline ? format(parseISO(t.deadline), 'dd/MM/yyyy') : 'Không có',
         'Số người được giao': assignedNames.split(',').filter(x=>x).length,
