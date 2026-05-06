@@ -84,14 +84,13 @@ export const BottomNav: React.FC = () => {
           />
         )}
 
-        {currentUser.role === 'admin' && (
-          <NavItem 
-            active={activeTab === 'settings'} 
-            onClick={() => setActiveTab('settings')}
-            icon={<Settings className="w-5 h-5" />}
-            label="Cài đặt"
-          />
-        )}
+        {/* NÚT CÀI ĐẶT & HỒ SƠ ĐÃ MỞ CHO TẤT CẢ MỌI NGƯỜI */}
+        <NavItem 
+          active={activeTab === 'settings'} 
+          onClick={() => setActiveTab('settings')}
+          icon={<Settings className="w-5 h-5" />}
+          label="Cài đặt & Hồ sơ"
+        />
       </div>
     </div>
   );
