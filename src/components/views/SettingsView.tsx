@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { Settings, Plus, Trash2, Edit2, Check, X, UserCircle, Phone, Mail, Save, Database, Server, BookOpen, Layers, Tags } from 'lucide-react';
+import { Settings, Plus, Trash2, Edit2, Check, X, UserCircle, Phone, Mail, Save, Database, Server, BookOpen, Layers, Tags, MessageSquarePlus, Send } from 'lucide-react';
 import { cn, getUserGrades } from '../../utils';
 import { db } from '../../firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, addDoc, getDocs, query, orderBy } from 'firebase/firestore';
 
 const ManageList = ({ title, icon: Icon, items, setItems, onAddItem, onUpdateItem, onDeleteItem }: { 
   title: string, 
@@ -116,9 +116,29 @@ const ManageList = ({ title, icon: Icon, items, setItems, onAddItem, onUpdateIte
 export const SettingsView: React.FC = () => {
   const { currentUser, departments, setDepartments, grades, setGrades, users, setUsers, documentCategories, setDocumentCategories, gasUrl, setGasUrl, updateUser, activeWeeksView, setActiveWeeksView, showToast } = useAppContext();
 
-  // State cho phần cập nhật thông tin cá nhân
   const [personalName, setPersonalName] = useState(currentUser?.name || '');
   const [personalPhone, setPersonalPhone] = useState(currentUser?.phone || '');
+  
+  // State cho tính năng Góp ý
+  const [feedbackContent, setFeedbackContent] = useState('');
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+  const [adminFeedbacks, setAdminFeedbacks] = useState<any[]>([]);
+
+  // Tải danh sách góp ý nếu là Admin
+  useEffect(() => {
+    if (currentUser?.role === 'admin') {
+      const fetchFeedbacks = async () => {
+        try {
+          const q = query(collection(db, 'feedbacks'), orderBy('createdAt', 'desc'));
+          const snap = await getDocs(q);
+          setAdminFeedbacks(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        } catch (error) {
+          console.error('Lỗi tải danh sách góp ý', error);
+        }
+      };
+      fetchFeedbacks();
+    }
+  }, [currentUser]);
 
   if (!currentUser) return null;
 
@@ -131,40 +151,53 @@ export const SettingsView: React.FC = () => {
     showToast("Đã cập nhật thông tin cá nhân thành công!");
   };
 
+  const handleSendFeedback = async () => {
+    if (!feedbackContent.trim()) {
+      showToast("Vui lòng nhập nội dung góp ý!");
+      return;
+    }
+    setIsSubmittingFeedback(true);
+    try {
+      const newFeedback = {
+        userId: currentUser.id,
+        userName: currentUser.name,
+        content: feedbackContent.trim(),
+        createdAt: new Date().toISOString()
+      };
+      await addDoc(collection(db, 'feedbacks'), newFeedback);
+      setFeedbackContent('');
+      showToast("Cảm ơn thầy/cô! Góp ý đã được gửi đến Ban Giám Hiệu.");
+      
+      // Update local list if admin is testing it
+      if (currentUser.role === 'admin') {
+         setAdminFeedbacks([{ id: Date.now().toString(), ...newFeedback }, ...adminFeedbacks]);
+      }
+    } catch (error) {
+      console.error(error);
+      showToast("Có lỗi xảy ra khi gửi góp ý.");
+    } finally {
+      setIsSubmittingFeedback(false);
+    }
+  };
+
   const handleAddDept = async (newName: string) => {
     const newVal = [...departments, newName];
     setDepartments(newVal);
-    try {
-      await setDoc(doc(db, "settings", "system"), { departments: newVal }, { merge: true });
-    } catch (e) {
-      console.error(e);
-      alert("Lỗi thêm DB: " + (e as Error).message);
-    }
+    await setDoc(doc(db, "settings", "system"), { departments: newVal }, { merge: true });
   };
 
   const handleUpdateDept = async (oldName: string, newName: string) => {
     const newVal = departments.map(d => d === oldName ? newName : d);
     setDepartments(newVal);
-    try {
-      await setDoc(doc(db, "settings", "system"), { departments: newVal }, { merge: true });
-    } catch (e) {
-      console.error(e);
-      alert("Lỗi lưu DB: " + (e as Error).message);
-    }
-    
-    users.filter(u => u.department === oldName).forEach(u => {
-      updateUser(u.id, { department: newName });
-    });
+    await setDoc(doc(db, "settings", "system"), { departments: newVal }, { merge: true });
+    users.filter(u => u.department === oldName).forEach(u => updateUser(u.id, { department: newName }));
   };
 
   const handleDeleteDept = async (name: string) => {
     const newVal = departments.filter(d => d !== name);
     setDepartments(newVal);
     await setDoc(doc(db, "settings", "system"), { departments: newVal }, { merge: true });
-    
-    users.filter(u => u.department === name).forEach(u => {
-      updateUser(u.id, { department: 'Khác' });
-    });
+    users.filter(u => u.department === name).forEach(u => updateUser(u.id, { department: 'Khác' }));
   };
 
   const handleAddGrade = async (newName: string) => {
@@ -177,20 +210,12 @@ export const SettingsView: React.FC = () => {
     const newVal = grades.map(g => g === oldName ? newName : g);
     setGrades(newVal);
     await setDoc(doc(db, "settings", "system"), { grades: newVal }, { merge: true });
-    
-    users.filter(u => u.grade === oldName).forEach(u => {
-      updateUser(u.id, { grade: newName });
-    });
   };
 
   const handleDeleteGrade = async (name: string) => {
     const newVal = grades.filter(g => g !== name);
     setGrades(newVal);
     await setDoc(doc(db, "settings", "system"), { grades: newVal }, { merge: true });
-    
-    users.filter(u => u.grade === name).forEach(u => {
-      updateUser(u.id, { grade: 'Khác' });
-    });
   };
 
   const handleAddDocCat = async (newName: string) => {
@@ -211,7 +236,6 @@ export const SettingsView: React.FC = () => {
     await setDoc(doc(db, "settings", "system"), { documentCategories: newVal }, { merge: true });
   };
 
-  // Sử dụng hàm tiện ích để lấy chuẩn xác mảng Khối/Nhóm
   const myGrades = getUserGrades(currentUser.grade);
 
   return (
@@ -224,7 +248,7 @@ export const SettingsView: React.FC = () => {
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-20">
         
-        {/* KHU VỰC 1: HỒ SƠ CÁ NHÂN (AI CŨNG THẤY) */}
+        {/* KHU VỰC 1: HỒ SƠ CÁ NHÂN */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="p-4 border-b border-slate-100 bg-indigo-50/30 flex items-center gap-2">
              <UserCircle className="w-5 h-5 text-indigo-600" />
@@ -255,7 +279,6 @@ export const SettingsView: React.FC = () => {
                 </div>
               </div>
               
-              {/* HIỂN THỊ THÔNG TIN PHÂN BỔ TỔ / NHÓM */}
               <div className="col-span-1 md:col-span-2 space-y-3 pt-2">
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Vị trí công tác của bạn</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -279,7 +302,7 @@ export const SettingsView: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">Email đăng nhập (Không thể sửa)</label>
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">Email đăng nhập</label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input 
@@ -300,6 +323,34 @@ export const SettingsView: React.FC = () => {
                 <Save className="w-4 h-4" /> Lưu thông tin cá nhân
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* KHU VỰC ĐÓNG GÓP Ý KIẾN NÂNG CẤP (AI CŨNG THẤY) */}
+        <div className="bg-white rounded-2xl shadow-sm border border-emerald-200 overflow-hidden">
+          <div className="p-4 border-b border-emerald-100 bg-emerald-50/50 flex items-center gap-2">
+             <MessageSquarePlus className="w-5 h-5 text-emerald-600" />
+             <h2 className="font-bold text-slate-800 text-sm uppercase tracking-wide">Góp ý & Đề xuất nâng cấp</h2>
+          </div>
+          <div className="p-4 sm:p-5">
+             <p className="text-xs text-slate-500 mb-3 font-medium leading-relaxed">
+               Ứng dụng đang trong quá trình thử nghiệm. Nếu thầy/cô có ý tưởng tính năng mới, hoặc phát hiện lỗi, vui lòng gửi góp ý để Ban Quản Trị nâng cấp hệ thống tốt hơn.
+             </p>
+             <textarea
+                value={feedbackContent}
+                onChange={e => setFeedbackContent(e.target.value)}
+                placeholder="Nhập ý tưởng nâng cấp, báo lỗi..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm outline-none focus:bg-white focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all min-h-[100px] resize-y font-medium text-slate-700 shadow-inner"
+             />
+             <div className="mt-3 flex justify-end">
+                 <button 
+                   onClick={handleSendFeedback} 
+                   disabled={isSubmittingFeedback || !feedbackContent.trim()} 
+                   className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm active:scale-95"
+                 >
+                    <Send className="w-4 h-4" /> Gửi góp ý
+                 </button>
+             </div>
           </div>
         </div>
 
@@ -353,6 +404,34 @@ export const SettingsView: React.FC = () => {
             <div className="md:w-1/2">
               <ManageList title="Danh mục Kho Tài liệu" icon={Tags} items={documentCategories} setItems={setDocumentCategories} onAddItem={handleAddDocCat} onUpdateItem={handleUpdateDocCat} onDeleteItem={handleDeleteDocCat} />
             </div>
+
+            {/* HÒM THƯ GÓP Ý DÀNH RIÊNG CHO ADMIN ĐỌC */}
+            <div className="bg-white rounded-2xl shadow-sm border border-emerald-200 overflow-hidden mt-8">
+               <div className="p-4 border-b border-emerald-100 bg-emerald-50 flex justify-between items-center">
+                   <h2 className="font-bold text-emerald-800 text-sm flex items-center gap-2">Hòm thư Góp ý từ Giáo viên</h2>
+                   <span className="bg-emerald-200 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full font-bold">{adminFeedbacks.length} ý kiến</span>
+               </div>
+               <div className="p-4 space-y-3 max-h-[300px] overflow-y-auto bg-slate-50/50">
+                   {adminFeedbacks.length === 0 ? (
+                       <p className="text-center text-slate-400 text-xs italic py-4">Chưa có góp ý nào từ giáo viên.</p>
+                   ) : (
+                       adminFeedbacks.map(fb => (
+                           <div key={fb.id} className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+                               <div className="flex justify-between items-start mb-2">
+                                   <span className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                                      <UserCircle className="w-4 h-4 text-slate-400" /> {fb.userName}
+                                   </span>
+                                   <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                      {new Date(fb.createdAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })}
+                                   </span>
+                               </div>
+                               <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">{fb.content}</p>
+                           </div>
+                       ))
+                   )}
+               </div>
+            </div>
+
           </>
         )}
       </div>
