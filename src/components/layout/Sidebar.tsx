@@ -72,14 +72,6 @@ export const Sidebar: React.FC = () => {
               icon={<BarChart3 className="w-5 h-5" />}
               label="Thống kê"
             />
-            {currentUser.role === 'admin' && (
-              <NavItem 
-                active={activeTab === 'settings'} 
-                onClick={() => setActiveTab('settings')}
-                icon={<Settings className="w-5 h-5" />}
-                label="Cài đặt hệ thống"
-              />
-            )}
             <div className="my-4 border-t border-slate-800" />
           </>
         )}
@@ -98,6 +90,14 @@ export const Sidebar: React.FC = () => {
           onClick={() => setActiveTab('documents')}
           icon={<FileText className="w-5 h-5" />}
           label="Tài liệu"
+        />
+
+        {/* NÚT CÀI ĐẶT & HỒ SƠ ĐÃ ĐƯỢC GIẢI CỨU ĐỂ AI CŨNG THẤY */}
+        <NavItem 
+          active={activeTab === 'settings'} 
+          onClick={() => setActiveTab('settings')}
+          icon={<Settings className="w-5 h-5" />}
+          label="Cài đặt & Hồ sơ"
         />
       </div>
 
